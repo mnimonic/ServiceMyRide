@@ -6,6 +6,7 @@ import { Card, Button, Field, Chip, Sheet, Badge, Empty } from '../../src/compon
 import { COLORS as C, VEHICLE_TYPES, MAINTENANCE_PRESETS } from '../../src/constants';
 import { computeMaintenanceStatus, getEffectiveMaintenancePresets, levelColor, fmtDate } from '../../src/utils/helpers';
 import { isSupported, scanForDevices, monitorDevice } from '../../src/utils/bluetooth';
+import { confirmAction } from '../../src/utils/confirm';
 
 export default function VehicleDetail() {
   const { id } = useLocalSearchParams();
@@ -173,10 +174,19 @@ export default function VehicleDetail() {
   }
 
   function confirmDelete() {
-    Alert.alert('Delete vehicle?', 'This removes the vehicle and all its logs, documents and reminders.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await app.removeVehicle(id); router.back(); } },
-    ]);
+    confirmAction(
+      'Delete vehicle?',
+      'This removes the vehicle and all its logs, documents and reminders.',
+      async () => { await app.removeVehicle(id); router.back(); }
+    );
+  }
+
+  function confirmDeleteHistory(h) {
+    confirmAction(
+      'Delete this service record?',
+      `${h.label} on ${fmtDate(h.date)} will be permanently removed.`,
+      () => app.remove('maintenance', h.id)
+    );
   }
 
   async function saveOdo() {
@@ -255,7 +265,7 @@ export default function VehicleDetail() {
               <Text style={s.body}>{h.label}</Text>
               <Text style={s.dim}>{fmtDate(h.date)}{h.odometer ? ` · ${h.odometer}km` : ''}{h.cost ? ` · €${h.cost}` : ''}{h.notes ? ` · ${h.notes}` : ''}</Text>
             </View>
-            <TouchableOpacity onPress={() => app.remove('maintenance', h.id)}><Text style={s.del}>✕</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => confirmDeleteHistory(h)}><Text style={s.del}>✕</Text></TouchableOpacity>
           </View>
         ))}
       </Card>

@@ -5,6 +5,7 @@ import { Card, Button, Field, Chip, Sheet, Empty, Badge } from '../../src/compon
 import { COLORS as C, DOCUMENT_TYPES } from '../../src/constants';
 import { fmtDate, dueStatus, levelColor } from '../../src/utils/helpers';
 import { schedule, cancel } from '../../src/utils/notifications';
+import { confirmAction } from '../../src/utils/confirm';
 
 export default function Documents() {
   const app = useApp();
@@ -47,9 +48,11 @@ export default function Documents() {
     setAdding(false);
   }
 
-  async function del(d) {
-    await cancel(d.notifId);
-    await app.remove('documents', d.id);
+  function del(d) {
+    confirmAction('Delete this document?', `"${d.label}" will be permanently removed.`, async () => {
+      await cancel(d.notifId);
+      await app.remove('documents', d.id);
+    });
   }
 
   const sorted = useMemo(

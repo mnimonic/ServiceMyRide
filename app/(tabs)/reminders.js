@@ -5,6 +5,7 @@ import { Card, Button, Field, Chip, Sheet, Empty, Badge } from '../../src/compon
 import { COLORS as C, REMINDER_REPEAT } from '../../src/constants';
 import { fmtDate } from '../../src/utils/helpers';
 import { schedule, cancel } from '../../src/utils/notifications';
+import { confirmAction } from '../../src/utils/confirm';
 
 export default function Reminders() {
   const app = useApp();
@@ -41,9 +42,11 @@ export default function Reminders() {
     setAdding(false);
   }
 
-  async function del(r) {
-    await cancel(r.notifId);
-    await app.remove('reminders', r.id);
+  function del(r) {
+    confirmAction('Delete reminder?', `"${r.title}" will be permanently removed.`, async () => {
+      await cancel(r.notifId);
+      await app.remove('reminders', r.id);
+    });
   }
 
   const quick = [

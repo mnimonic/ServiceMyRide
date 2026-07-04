@@ -4,6 +4,7 @@ import { useApp } from '../../src/context/AppContext';
 import { Card, Button, Field, Chip, Sheet, Empty, Badge } from '../../src/components/ui';
 import { COLORS as C } from '../../src/constants';
 import { fmtDate } from '../../src/utils/helpers';
+import { confirmAction } from '../../src/utils/confirm';
 
 const CATEGORIES = ['Filters', 'Oil/Fluids', 'Brakes', 'Tires', 'Electrical', 'Consumables', 'Other'];
 
@@ -67,7 +68,8 @@ export default function Inventory() {
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
               <Button title={i.used ? 'Mark unused' : 'Mark used'} variant="secondary" small
                 onPress={() => app.update('inventory', i.id, { used: !i.used })} />
-              <Button title="Delete" variant="ghost" small onPress={() => app.remove('inventory', i.id)} />
+              <Button title="Delete" variant="ghost" small
+                onPress={() => confirmAction('Delete this item?', `"${i.name}" will be permanently removed.`, () => app.remove('inventory', i.id))} />
             </View>
           </Card>
         );
