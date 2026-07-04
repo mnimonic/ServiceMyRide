@@ -1,9 +1,11 @@
 // Dynamic config (instead of app.json) so the Google OAuth redirect scheme can
-// be derived from EXPO_PUBLIC_GOOGLE_*_CLIENT_ID in .env. Google rejects native
-// redirect URIs based on the app's own package scheme ("Custom URI scheme is
-// not enabled for your Android client") — native OAuth clients must redirect
-// through the reversed-client-id scheme Google issues per client instead, and
-// that scheme has to be registered here so the OS routes it back into the app.
+// be derived from EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID in .env. iOS OAuth clients
+// still redirect through the reversed-client-id scheme Google issues per
+// client (e.g. com.googleusercontent.apps.<id>), so it has to be registered
+// here so the OS routes it back into the app. Android no longer uses a
+// redirect at all — Google removed custom-scheme redirects for Android OAuth
+// clients, so Android sign-in goes through the native Play Services flow
+// (@react-native-google-signin/google-signin) instead, which needs no scheme.
 function reversedClientIdScheme(clientId) {
   const suffix = '.apps.googleusercontent.com';
   if (!clientId || !clientId.endsWith(suffix)) return null;
@@ -11,7 +13,6 @@ function reversedClientIdScheme(clientId) {
 }
 
 const oauthSchemes = [
-  reversedClientIdScheme(process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID),
   reversedClientIdScheme(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID),
 ].filter(Boolean);
 
@@ -60,6 +61,7 @@ module.exports = {
     plugins: [
       'expo-router',
       'expo-notifications',
+      '@react-native-google-signin/google-signin',
       [
         'expo-image-picker',
         {

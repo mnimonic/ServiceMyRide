@@ -17,22 +17,22 @@ All data is stored locally on-device via AsyncStorage (single JSON document, eas
 
 ## Google & Drive setup
 
-The app uses `expo-auth-session` for “Login with Google” and the Google Drive REST API for backup. Backups live in Drive’s **appDataFolder** — a hidden, per-app folder — so we only request the narrow `drive.appdata` scope, and your backup never clutters your visible Drive.
+Web and iOS use `expo-auth-session` for “Login with Google”; Android uses `@react-native-google-signin/google-signin` (a native Play Services flow), because **Google no longer supports custom-scheme redirects for Android OAuth clients** — the browser-redirect approach `expo-auth-session` relies on cannot work there anymore. All platforms use the Google Drive REST API for backup. Backups live in Drive’s **appDataFolder** — a hidden, per-app folder — so we only request the narrow `drive.appdata` scope, and your backup never clutters your visible Drive.
 
 1. **Create a Google Cloud project** → https://console.cloud.google.com
-2. **OAuth consent screen**: configure it (External is fine for personal use), add your email as a test user, and add the scopes `.../auth/userinfo.email`, `.../auth/userinfo.profile`, and `.../auth/drive.appdata`.
-3. **Enable the Google Drive API** under APIs & Services → Library.
+2. **OAuth consent screen**: configure it (External is fine for personal use), add your email as a test user, and under **Data access → Add or remove scopes** add `.../auth/userinfo.email`, `.../auth/userinfo.profile`, and (search “Drive”, from the **Google Drive API**) `.../auth/drive.appdata`.
+3. **Enable the Google Drive API** under APIs & Services → Library — the `drive.appdata` scope won’t show up in step 2 until this is enabled.
 4. **Create credentials → OAuth client IDs**, one per platform you target:
-   - **Web application** — add your dev URL (e.g. `http://localhost:8081`) to *Authorized JavaScript origins* and the Expo auth redirect to *Authorized redirect URIs*.
+   - **Web application** — add your dev URL (e.g. `http://localhost:8081`) to *Authorized JavaScript origins* and the Expo auth redirect to *Authorized redirect URIs*. **This one is also required for Android**: the native sign-in library authenticates the app via Play Services (using the Android client below) but is *configured* with the Web client id.
    - **iOS** — bundle id `com.servicemyride.app`.
-   - **Android** — package `com.servicemyride.app` + the SHA-1 of your signing key (`eas credentials` or `keytool`).
+   - **Android** — package `com.servicemyride.app` + the SHA-1 of your signing key (debug keystore for local dev-client builds: `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android`; production key via `eas credentials`).
 5. **Copy `.env.example` to `.env`** and paste the client IDs:
    ```
    EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=...
    EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=...
    EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=...
    ```
-6. Rebuild. Open the **Account** tab and tap **Continue with Google**.
+6. Rebuild (`npx expo prebuild` then `npx expo run:android`/`run:ios` — the Android sign-in library is a native module, so a Metro-only restart isn't enough after first install). Open the **Account** tab and tap **Continue with Google**.
 
 > Like Bluetooth and notifications, Google Sign-In needs a **development build** on device — it does not work in Expo Go. On web it works with just the Web client ID.
 

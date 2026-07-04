@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as db from '../storage/db';
 import {
   findBackupFile, uploadBackup, downloadBackup, fetchUserInfo,
@@ -31,23 +32,23 @@ const SCOPES = [
   'https://www.googleapis.com/auth/drive.appdata',
 ];
 
-// Google rejects native redirect URIs based on the app's own package/bundle
-// scheme ("Custom URI scheme is not enabled for your Android client") because
-// that scheme isn't provably unique to this app. Native (Android/iOS) OAuth
-// clients must instead redirect through the reversed-client-id scheme Google
-// issues per client, e.g. com.googleusercontent.apps.<client-id-prefix>.
-// This same scheme is registered in app.config.js so the OS routes it back in.
+// Google removed custom-scheme redirect support for Android OAuth clients
+// entirely ("Custom URI schemes are no longer supported on Android"), so
+// expo-auth-session's browser-redirect flow can't work there anymore. Android
+// signs in through the native Play Services flow instead (no redirect URI —
+// Play Services authenticates the app via the package+SHA-1 already
+// registered on the Android OAuth client). iOS/web still use expo-auth-session.
+//
+// iOS OAuth clients still redirect through the reversed-client-id scheme
+// Google issues per client (e.g. com.googleusercontent.apps.<client-id>),
+// which is registered as an additional `scheme` in app.config.js.
 function reversedClientIdScheme(clientId) {
   const suffix = '.apps.googleusercontent.com';
   if (!clientId || !clientId.endsWith(suffix)) return null;
   return `com.googleusercontent.apps.${clientId.slice(0, -suffix.length)}`;
 }
 
-const NATIVE_REDIRECT_SCHEME = Platform.select({
-  android: reversedClientIdScheme(CLIENT_IDS.androidClientId),
-  ios: reversedClientIdScheme(CLIENT_IDS.iosClientId),
-  default: null,
-});
+const NATIVE_REDIRECT_SCHEME = Platform.OS === 'ios' ? reversedClientIdScheme(CLIENT_IDS.iosClientId) : null;
 
 export function AuthProvider({ children, onDataChanged }) {
   const [user, setUser] = useState(null);          // { name, email, picture }
@@ -61,6 +62,19 @@ export function AuthProvider({ children, onDataChanged }) {
   );
 
   const configured = !!(CLIENT_IDS.webClientId || CLIENT_IDS.androidClientId || CLIENT_IDS.iosClientId);
+
+  // Native Google Sign-In (Android) is configured against the *web* client id
+  // — Play Services derives the Android client from the app's own signing
+  // cert + package name, matched within the same Cloud project as this id.
+  useEffect(() => {
+    if (Platform.OS === 'android' && CLIENT_IDS.webClientId) {
+      GoogleSignin.configure({
+        webClientId: CLIENT_IDS.webClientId,
+        scopes: ['https://www.googleapis.com/auth/drive.appdata'],
+        offlineAccess: false,
+      });
+    }
+  }, []);
 
   // Restore a saved session on launch
   useEffect(() => {
@@ -109,15 +123,33 @@ export function AuthProvider({ children, onDataChanged }) {
     await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(next));
   }
 
+  async function signInAndroid() {
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      await GoogleSignin.signIn();
+      const tokens = await GoogleSignin.getTokens();
+      await handleToken(tokens.accessToken);
+    } catch (e) {
+      setSyncState((s) => ({ ...s, status: 'error', error: String(e.message || e) }));
+    }
+  }
+
   const signIn = useCallback(() => {
     if (!configured) {
       setSyncState((s) => ({ ...s, status: 'error', error: 'Google client IDs not configured' }));
+      return;
+    }
+    if (Platform.OS === 'android') {
+      signInAndroid();
       return;
     }
     promptAsync();
   }, [configured, promptAsync]);
 
   const signOut = useCallback(async () => {
+    if (Platform.OS === 'android') {
+      try { await GoogleSignin.signOut(); } catch (e) {}
+    }
     setUser(null);
     setToken(null);
     await AsyncStorage.removeItem(AUTH_KEY);
@@ -190,7 +222,7 @@ export function AuthProvider({ children, onDataChanged }) {
   const api = {
     user, token, ready, configured, syncState,
     signIn, signOut, syncNow, backupNow, restoreNow,
-    canPrompt: !!request,
+    canPrompt: Platform.OS === 'android' ? true : !!request,
     isSignedIn: !!user,
   };
 

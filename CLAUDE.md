@@ -37,7 +37,7 @@ Google Sign-In requires client IDs in `.env` (copied from `.env.example`, `EXPO_
 ### State: two independent contexts + an event bridge
 
 - `src/context/AppContext.js` wraps `db.js` in React state and re-`refresh()`es (a full re-read from storage) after every mutation. Screens consume it via `useApp()`.
-- `src/context/AuthContext.js` owns Google sign-in (`expo-auth-session`) and Drive sync (`src/utils/googleDrive.js`), independently of `AppContext`.
+- `src/context/AuthContext.js` owns Google sign-in and Drive sync (`src/utils/googleDrive.js`), independently of `AppContext`. Sign-in is platform-split: Android uses `@react-native-google-signin/google-signin` (native Play Services flow — Google dropped custom-scheme redirect support for Android OAuth clients, so `expo-auth-session`'s browser-redirect flow can't work there), while iOS/web still use `expo-auth-session`. Both paths converge on the same `handleToken(accessToken)`.
 - These two contexts deliberately don't import each other. Since a Drive sync/restore rewrites AsyncStorage out from under `AppContext`'s in-memory cache, `AuthContext` must trigger a reload — it does so through `src/context/refreshBridge.js`, a tiny module-level callback registry, wired up in `app/_layout.js` (`<AuthProvider onDataChanged={triggerRefresh}>`). If you add a third piece of cross-context state, follow this same one-directional bridge pattern rather than merging the two contexts or having them import each other.
 
 ### Sync semantics (`AuthContext` + `db.js`)
