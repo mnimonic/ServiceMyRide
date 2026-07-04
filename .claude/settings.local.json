@@ -21,7 +21,11 @@
       "Bash(git check-ignore *)",
       "Bash(./gradlew assembleRelease --console=plain)",
       "PowerShell(npm run *)",
-      "PowerShell(npm config *)"
+      "PowerShell(npm config *)",
+      "PowerShell(cmd /c \"cd android && gradlew assembleRelease\" 2>&1 | Select-Object -Last 15)",
+      "PowerShell(cmd /c \"cd /d C:\\\\Projects\\\\ServiceMyRide\\\\android && gradlew.bat --version\" 2>&1 | Select-Object -Last 20)",
+      "Bash(npm run *)",
+      "Bash(cmd.exe /c \"gradlew.bat --version\")"
     ]
   }
 }

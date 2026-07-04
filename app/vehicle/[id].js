@@ -24,9 +24,23 @@ export default function VehicleDetail() {
   const [customizing, setCustomizing] = useState(false);
   const [overrideDraft, setOverrideDraft] = useState({});
   const [photoSheet, setPhotoSheet] = useState(false);
+  const [editingRecord, setEditingRecord] = useState(null);
 
   function newLog() {
-    return { taskKeys: [], customLabels: [], customInput: '', date: new Date().toISOString(), odometer: '', cost: '', notes: '' };
+    return { taskKeys: [], customLabels: [], customInput: '', dateStr: toDateInput(new Date().toISOString()), odometer: '', cost: '', notes: '' };
+  }
+
+  function toDateInput(iso) {
+    const d = new Date(iso);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+
+  function parseDateInput(str) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str.trim());
+    if (!m) return null;
+    const d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return Number.isNaN(d.getTime()) ? null : d;
   }
 
   const statuses = useMemo(
@@ -136,12 +150,16 @@ export default function VehicleDetail() {
       ...log.customLabels.map((label, i) => ({ taskKey: `custom_${Date.now()}_${i}`, label })),
     ];
     if (items.length === 0) return;
+    const parsedDate = parseDateInput(log.dateStr);
+    if (!parsedDate) { Alert.alert('Invalid date', 'Use format YYYY-MM-DD.'); return; }
+    const isoDate = parsedDate.toISOString();
+
     for (const item of items) {
       await app.insert('maintenance', {
         vehicleId: id,
         taskKey: item.taskKey,
         label: item.label,
-        date: log.date,
+        date: isoDate,
         odometer: log.odometer ? Number(log.odometer) : null,
         cost: log.cost ? Number(log.cost) : null,
         notes: log.notes,
@@ -189,6 +207,30 @@ export default function VehicleDetail() {
       `${h.label} on ${fmtDate(h.date)} will be permanently removed.`,
       () => app.remove('maintenance', h.id)
     );
+  }
+
+  function openEditRecord(h) {
+    setEditingRecord({
+      id: h.id,
+      label: h.label,
+      dateStr: toDateInput(h.date),
+      odometer: h.odometer != null ? String(h.odometer) : '',
+      cost: h.cost != null ? String(h.cost) : '',
+      notes: h.notes || '',
+    });
+  }
+
+  async function saveEditRecord() {
+    const parsedDate = parseDateInput(editingRecord.dateStr);
+    if (!parsedDate) { Alert.alert('Invalid date', 'Use format YYYY-MM-DD.'); return; }
+    await app.update('maintenance', editingRecord.id, {
+      label: editingRecord.label.trim() || editingRecord.label,
+      date: parsedDate.toISOString(),
+      odometer: editingRecord.odometer ? Number(editingRecord.odometer) : null,
+      cost: editingRecord.cost ? Number(editingRecord.cost) : null,
+      notes: editingRecord.notes,
+    });
+    setEditingRecord(null);
   }
 
   async function saveOdo() {
@@ -294,7 +336,10 @@ export default function VehicleDetail() {
               <Text style={s.body}>{h.label}</Text>
               <Text style={s.dim}>{fmtDate(h.date)}{h.odometer ? ` · ${h.odometer}km` : ''}{h.cost ? ` · €${h.cost}` : ''}{h.notes ? ` · ${h.notes}` : ''}</Text>
             </View>
-            <TouchableOpacity onPress={() => confirmDeleteHistory(h)}><Text style={s.del}>✕</Text></TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 14 }}>
+              <TouchableOpacity onPress={() => openEditRecord(h)}><Text style={s.edit}>✎</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => confirmDeleteHistory(h)}><Text style={s.del}>✕</Text></TouchableOpacity>
+            </View>
           </View>
         ))}
       </Card>
@@ -315,7 +360,7 @@ export default function VehicleDetail() {
       <Button title="Delete vehicle" variant="danger" style={{ marginTop: 8 }} onPress={confirmDelete} />
 
       {/* Log service sheet */}
-      <Sheet visible={logging} onClose={() => setLogging(false)} title="Log Service">
+      <Sheet visible={logging} onClose={() => { setLogging(false); setLog(newLog()); }} title="Log Service">
         <Text style={s.dim}>Tasks done in this visit</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginVertical: 8 }}>
           {presetsForType.map((p) => (
@@ -338,8 +383,23 @@ export default function VehicleDetail() {
         <Field label="Odometer (km)" value={log.odometer} onChangeText={(v) => setLog({ ...log, odometer: v })} keyboardType="numeric" placeholder={String(vehicle.odometer || '')} />
         <Field label="Cost (€)" value={log.cost} onChangeText={(v) => setLog({ ...log, cost: v })} keyboardType="numeric" placeholder="Optional" />
         <Field label="Notes" value={log.notes} onChangeText={(v) => setLog({ ...log, notes: v })} placeholder="Brand, part number, shop…" multiline />
-        <Text style={s.dim}>Date: {fmtDate(log.date)} (today)</Text>
+        <Field label="Date (YYYY-MM-DD)" value={log.dateStr} onChangeText={(v) => setLog({ ...log, dateStr: v })} placeholder={toDateInput(new Date().toISOString())} />
         <Button title="Save service log" onPress={saveLog} style={{ marginTop: 12 }} />
+        <View style={{ height: 20 }} />
+      </Sheet>
+
+      {/* Edit service record sheet */}
+      <Sheet visible={!!editingRecord} onClose={() => setEditingRecord(null)} title="Edit Service Record">
+        {editingRecord && (
+          <>
+            <Field label="Task" value={editingRecord.label} onChangeText={(v) => setEditingRecord({ ...editingRecord, label: v })} />
+            <Field label="Date (YYYY-MM-DD)" value={editingRecord.dateStr} onChangeText={(v) => setEditingRecord({ ...editingRecord, dateStr: v })} placeholder="2026-07-04" />
+            <Field label="Odometer (km)" value={editingRecord.odometer} onChangeText={(v) => setEditingRecord({ ...editingRecord, odometer: v })} keyboardType="numeric" placeholder={String(vehicle.odometer || '')} />
+            <Field label="Cost (€)" value={editingRecord.cost} onChangeText={(v) => setEditingRecord({ ...editingRecord, cost: v })} keyboardType="numeric" placeholder="Optional" />
+            <Field label="Notes" value={editingRecord.notes} onChangeText={(v) => setEditingRecord({ ...editingRecord, notes: v })} placeholder="Brand, part number, shop…" multiline />
+            <Button title="Save changes" onPress={saveEditRecord} style={{ marginTop: 12 }} />
+          </>
+        )}
         <View style={{ height: 20 }} />
       </Sheet>
 
@@ -430,4 +490,5 @@ const s = StyleSheet.create({
   histRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border },
   devRow: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border },
   del: { color: C.red, fontSize: 16, paddingHorizontal: 8 },
+  edit: { color: C.accent, fontSize: 16, paddingHorizontal: 8 },
 });
