@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '../../src/context/AppContext';
@@ -108,7 +108,11 @@ export default function Garage() {
           <Card key={v.id}>
             <View style={st.vehicleRow}>
               <TouchableOpacity style={st.vehicleMain} onPress={() => router.push(`/vehicle/${v.id}`)}>
-                <Text style={st.vehicleIcon}>{type?.icon || '🔧'}</Text>
+                {v.photo ? (
+                  <Image source={{ uri: v.photo }} style={st.vehiclePhoto} />
+                ) : (
+                  <Text style={st.vehicleIcon}>{type?.icon || '🔧'}</Text>
+                )}
                 <View style={{ flex: 1 }}>
                   <Text style={st.vehicleName}>{v.name}</Text>
                   <Text style={st.vehicleSub}>
@@ -172,6 +176,7 @@ const st = StyleSheet.create({
   vehicleBadges: { gap: 4, alignItems: 'flex-end' },
   vehicleAlertList: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: C.border },
   vehicleIcon: { fontSize: 34 },
+  vehiclePhoto: { width: 44, height: 44, borderRadius: 22 },
   vehicleName: { color: C.text, fontSize: 18, fontWeight: '700' },
   vehicleSub: { color: C.textDim, fontSize: 13, marginTop: 2 },
   alertRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 },

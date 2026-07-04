@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 import { Card, Button, Field, Chip, Sheet, Badge, Empty } from '../../src/components/ui';
@@ -7,6 +7,7 @@ import { COLORS as C, VEHICLE_TYPES, MAINTENANCE_PRESETS } from '../../src/const
 import { computeMaintenanceStatus, getEffectiveMaintenancePresets, levelColor, fmtDate } from '../../src/utils/helpers';
 import { isSupported, scanForDevices, monitorDevice } from '../../src/utils/bluetooth';
 import { confirmAction } from '../../src/utils/confirm';
+import { pickVehiclePhoto, takeVehiclePhoto } from '../../src/utils/image';
 
 export default function VehicleDetail() {
   const { id } = useLocalSearchParams();
@@ -22,6 +23,7 @@ export default function VehicleDetail() {
   const [odo, setOdo] = useState('');
   const [customizing, setCustomizing] = useState(false);
   const [overrideDraft, setOverrideDraft] = useState({});
+  const [photoSheet, setPhotoSheet] = useState(false);
 
   function newLog() {
     return { taskKeys: [], customLabels: [], customInput: '', date: new Date().toISOString(), odometer: '', cost: '', notes: '' };
@@ -194,6 +196,27 @@ export default function VehicleDetail() {
     setEditingOdo(false);
   }
 
+  async function choosePhotoFromLibrary() {
+    const res = await pickVehiclePhoto();
+    if (res.error) { Alert.alert('Error', res.error); return; }
+    if (res.canceled) return;
+    await app.update('vehicles', id, { photo: res.uri });
+    setPhotoSheet(false);
+  }
+
+  async function capturePhoto() {
+    const res = await takeVehiclePhoto();
+    if (res.error) { Alert.alert('Error', res.error); return; }
+    if (res.canceled) return;
+    await app.update('vehicles', id, { photo: res.uri });
+    setPhotoSheet(false);
+  }
+
+  async function removePhoto() {
+    await app.update('vehicles', id, { photo: null });
+    setPhotoSheet(false);
+  }
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: C.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       <Stack.Screen options={{ title: vehicle.name }} />
@@ -201,7 +224,13 @@ export default function VehicleDetail() {
       {/* Header card */}
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Text style={{ fontSize: 40 }}>{type?.icon}</Text>
+          <TouchableOpacity onPress={() => setPhotoSheet(true)}>
+            {vehicle.photo ? (
+              <Image source={{ uri: vehicle.photo }} style={s.photo} />
+            ) : (
+              <View style={s.photoPlaceholder}><Text style={{ fontSize: 32 }}>{type?.icon}</Text></View>
+            )}
+          </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={s.name}>{vehicle.name}</Text>
             <Text style={s.sub}>{[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(' ')}</Text>
@@ -326,6 +355,18 @@ export default function VehicleDetail() {
         <View style={{ height: 20 }} />
       </Sheet>
 
+      {/* Vehicle photo sheet */}
+      <Sheet visible={photoSheet} onClose={() => setPhotoSheet(false)} title="Vehicle Photo">
+        <Button title="Choose from library" onPress={choosePhotoFromLibrary} />
+        {Platform.OS !== 'web' && (
+          <Button title="Take photo" variant="secondary" onPress={capturePhoto} style={{ marginTop: 8 }} />
+        )}
+        {vehicle.photo ? (
+          <Button title="Remove photo" variant="ghost" onPress={removePhoto} style={{ marginTop: 8 }} />
+        ) : null}
+        <View style={{ height: 20 }} />
+      </Sheet>
+
       {/* Odometer edit sheet */}
       <Sheet visible={editingOdo} onClose={() => setEditingOdo(false)} title="Update Odometer">
         <Field label="Current odometer (km)" value={odo} onChangeText={setOdo} keyboardType="numeric" placeholder="45000" />
@@ -375,6 +416,11 @@ const s = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 18, marginBottom: 10 },
   body: { color: C.text, fontSize: 15, fontWeight: '500' },
   dim: { color: C.textDim, fontSize: 13, marginTop: 2 },
+  photo: { width: 64, height: 64, borderRadius: 32 },
+  photoPlaceholder: {
+    width: 64, height: 64, borderRadius: 32, backgroundColor: C.cardAlt,
+    alignItems: 'center', justifyContent: 'center',
+  },
   odoBox: { marginTop: 14, backgroundColor: C.bg, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border },
   odoLabel: { color: C.textDim, fontSize: 12 },
   odoVal: { color: C.accent, fontSize: 18, fontWeight: '700', marginTop: 2 },

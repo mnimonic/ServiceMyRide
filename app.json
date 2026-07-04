@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "scheme": "servicemyride",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#0f172a"
@@ -21,6 +22,10 @@
     },
     "android": {
       "package": "com.servicemyride.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
@@ -38,6 +43,13 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Used to set a photo for a vehicle.",
+          "cameraPermission": "Used to take a photo of a vehicle."
+        }
+      ],
       [
         "react-native-ble-plx",
         {

@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const KEY = 'servicemyride:v1';
 
 const EMPTY = {
-  vehicles: [],       // {id,name,type,make,model,year,plate,odometer,bleId,bleName,maintenanceOverrides}
+  vehicles: [],       // {id,name,type,make,model,year,plate,odometer,photo,bleId,bleName,maintenanceOverrides}
   maintenance: [],    // {id,vehicleId,taskKey,label,date,odometer,cost,notes}
   documents: [],      // {id,vehicleId,typeKey,label,dueDate,notifId,notes}
   inventory: [],      // {id,name,category,qty,vehicleId,purchaseDate,cost,notes,used}
