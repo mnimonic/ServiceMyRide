@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "ServiceMyRide",
+    "slug": "servicemyride",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "servicemyride",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.servicemyride.app",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Used to detect when you are driving/riding a vehicle via its Bluetooth connection.",
+        "NSBluetoothPeripheralUsageDescription": "Used to detect vehicle Bluetooth connections."
+      }
+    },
+    "android": {
+      "package": "com.servicemyride.app",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["peripheral", "central"],
+          "bluetoothAlwaysPermission": "Detect vehicle Bluetooth connections to log drives."
+        }
+      ]
+    ]
+  }
+}

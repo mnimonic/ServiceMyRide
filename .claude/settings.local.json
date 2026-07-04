@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx expo *)",
+      "Bash(npm ls *)",
+      "Bash(where node *)",
+      "Bash(nvm version *)",
+      "Bash(nvm list *)",
+      "Bash(fnm --version)",
+      "Bash(volta --version)",
+      "Bash(EXPO_DEBUG=1 npx expo export --platform web)",
+      "Bash(where adb *)",
+      "Bash(adb devices *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(& \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" devices)",
+      "Bash(node -c app/vehicle/[id].js)",
+      "Bash(node -c \"app/vehicle/[id].js\")",
+      "Bash(echo \"EXIT:$?\")"
+    ]
+  }
+}
