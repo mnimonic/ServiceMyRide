@@ -31,16 +31,34 @@ const SCOPES = [
   'https://www.googleapis.com/auth/drive.appdata',
 ];
 
+// Google rejects native redirect URIs based on the app's own package/bundle
+// scheme ("Custom URI scheme is not enabled for your Android client") because
+// that scheme isn't provably unique to this app. Native (Android/iOS) OAuth
+// clients must instead redirect through the reversed-client-id scheme Google
+// issues per client, e.g. com.googleusercontent.apps.<client-id-prefix>.
+// This same scheme is registered in app.config.js so the OS routes it back in.
+function reversedClientIdScheme(clientId) {
+  const suffix = '.apps.googleusercontent.com';
+  if (!clientId || !clientId.endsWith(suffix)) return null;
+  return `com.googleusercontent.apps.${clientId.slice(0, -suffix.length)}`;
+}
+
+const NATIVE_REDIRECT_SCHEME = Platform.select({
+  android: reversedClientIdScheme(CLIENT_IDS.androidClientId),
+  ios: reversedClientIdScheme(CLIENT_IDS.iosClientId),
+  default: null,
+});
+
 export function AuthProvider({ children, onDataChanged }) {
   const [user, setUser] = useState(null);          // { name, email, picture }
   const [token, setToken] = useState(null);        // access token
   const [ready, setReady] = useState(false);       // finished restoring session
   const [syncState, setSyncState] = useState({ status: 'idle', lastSync: null, error: null });
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    ...CLIENT_IDS,
-    scopes: SCOPES,
-  });
+  const [request, response, promptAsync] = Google.useAuthRequest(
+    { ...CLIENT_IDS, scopes: SCOPES },
+    NATIVE_REDIRECT_SCHEME ? { native: `${NATIVE_REDIRECT_SCHEME}:/oauth2redirect` } : {}
+  );
 
   const configured = !!(CLIENT_IDS.webClientId || CLIENT_IDS.androidClientId || CLIENT_IDS.iosClientId);
 
