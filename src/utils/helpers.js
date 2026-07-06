@@ -10,6 +10,19 @@ export function fmtDate(d) {
   });
 }
 
+export function fmtDateTime(d) {
+  if (!d) return '—';
+  const date = new Date(d);
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }) + ' ' + date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function daysUntil(d) {
   if (!d) return null;
   const ms = new Date(d).getTime() - Date.now();

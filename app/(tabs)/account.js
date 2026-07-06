@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, Touchable
 import { useAuth } from '../../src/context/AuthContext';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { COLORS as C } from '../../src/constants';
-import { fmtDate } from '../../src/utils/helpers';
+import { fmtDateTime } from '../../src/utils/helpers';
 import { confirmAction } from '../../src/utils/confirm';
 
 function GoogleButton({ onPress, disabled }) {
@@ -34,7 +34,7 @@ export default function Account() {
     if (s.status === 'syncing') return 'Syncing…';
     if (s.status === 'error') return s.error || 'Error';
     if (s.status === 'expired') return 'Session expired';
-    if (s.lastSync) return `Last synced ${fmtDate(s.lastSync)}`;
+    if (s.lastSync) return `Last synced ${fmtDateTime(s.lastSync)}`;
     return 'Not synced yet';
   }
 

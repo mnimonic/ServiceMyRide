@@ -25,6 +25,8 @@ export default function VehicleDetail() {
   const [customizing, setCustomizing] = useState(false);
   const [overrideDraft, setOverrideDraft] = useState({});
   const [photoSheet, setPhotoSheet] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState(false);
+  const [vehicleDraft, setVehicleDraft] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
   const [maintCollapsed, setMaintCollapsed] = useState(true);
   const [manualLogging, setManualLogging] = useState(false);
@@ -349,6 +351,24 @@ export default function VehicleDetail() {
     setPhotoSheet(false);
   }
 
+  function openEditVehicle() {
+    setVehicleDraft({
+      type: vehicle.type,
+      name: vehicle.name || '',
+      make: vehicle.make || '',
+      model: vehicle.model || '',
+      year: vehicle.year != null ? String(vehicle.year) : '',
+      plate: vehicle.plate || '',
+    });
+    setEditingVehicle(true);
+  }
+
+  async function saveVehicleEdit() {
+    if (!vehicleDraft.name.trim()) return;
+    await app.update('vehicles', id, { ...vehicleDraft });
+    setEditingVehicle(false);
+  }
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: C.bg }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       <Stack.Screen options={{ title: vehicle.name }} />
@@ -369,6 +389,9 @@ export default function VehicleDetail() {
             <Text style={s.sub}>{[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(' ')}</Text>
             {vehicle.plate ? <Text style={s.sub}>Plate: {vehicle.plate}</Text> : null}
           </View>
+          <TouchableOpacity onPress={openEditVehicle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={s.edit}>✎</Text>
+          </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={() => { setOdo(String(vehicle.odometer || '')); setEditingOdo(true); }} style={s.odoBox}>
           <Text style={s.odoLabel}>Odometer</Text>
@@ -567,6 +590,28 @@ export default function VehicleDetail() {
         {vehicle.photo ? (
           <Button title="Remove photo" variant="ghost" onPress={removePhoto} style={{ marginTop: 8 }} />
         ) : null}
+        <View style={{ height: 20 }} />
+      </Sheet>
+
+      {/* Edit vehicle sheet */}
+      <Sheet visible={editingVehicle} onClose={() => setEditingVehicle(false)} title="Edit Vehicle">
+        {vehicleDraft && (
+          <>
+            <Text style={s.dim}>Type</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
+              {VEHICLE_TYPES.map((t) => (
+                <Chip key={t.key} label={t.label} icon={t.icon} active={vehicleDraft.type === t.key}
+                  onPress={() => setVehicleDraft({ ...vehicleDraft, type: t.key })} />
+              ))}
+            </View>
+            <Field label="Name / Nickname" value={vehicleDraft.name} onChangeText={(v) => setVehicleDraft({ ...vehicleDraft, name: v })} placeholder="e.g. Daily Civic" />
+            <Field label="Make" value={vehicleDraft.make} onChangeText={(v) => setVehicleDraft({ ...vehicleDraft, make: v })} placeholder="Honda" />
+            <Field label="Model" value={vehicleDraft.model} onChangeText={(v) => setVehicleDraft({ ...vehicleDraft, model: v })} placeholder="Innova" />
+            <Field label="Year" value={vehicleDraft.year} onChangeText={(v) => setVehicleDraft({ ...vehicleDraft, year: v })} keyboardType="numeric" placeholder="2018" />
+            <Field label="Plate" value={vehicleDraft.plate} onChangeText={(v) => setVehicleDraft({ ...vehicleDraft, plate: v })} placeholder="ABC-1234" />
+            <Button title="Save changes" onPress={saveVehicleEdit} style={{ marginTop: 12 }} />
+          </>
+        )}
         <View style={{ height: 20 }} />
       </Sheet>
 
