@@ -6,7 +6,7 @@ const KEY = 'servicemyride:v1';
 
 const EMPTY = {
   vehicles: [],       // {id,name,type,make,model,year,plate,odometer,photo,bleId,bleName,maintenanceOverrides}
-  maintenance: [],    // {id,vehicleId,taskKey,label,date,odometer,cost,notes}
+  maintenance: [],    // {id,vehicleId,date,odometer,cost,notes,tasks:[{taskKey,label}]} — one record per service visit
   documents: [],      // {id,vehicleId,typeKey,label,dueDate,notifId,notes}
   inventory: [],      // {id,name,category,qty,vehicleId,purchaseDate,cost,notes,used}
   reminders: [],      // {id,vehicleId,title,body,date,repeat,notifId,enabled}
@@ -16,6 +16,17 @@ const EMPTY = {
 
 let cache = null;
 
+// Older records logged one task per record (`taskKey`/`label` directly on the
+// record). Fold those into the current `tasks: [{taskKey,label}]` shape so
+// the rest of the app only ever deals with one format.
+function migrateMaintenance(db) {
+  db.maintenance = (db.maintenance || []).map((m) => {
+    if (m.tasks) return m;
+    const { taskKey, label, ...rest } = m;
+    return { ...rest, tasks: [{ taskKey, label }] };
+  });
+}
+
 export async function load() {
   if (cache) return cache;
   try {
@@ -24,6 +35,7 @@ export async function load() {
   } catch (e) {
     cache = { ...EMPTY };
   }
+  migrateMaintenance(cache);
   return cache;
 }
 
@@ -94,6 +106,7 @@ export async function dump() {
 // We shallow-merge onto EMPTY so any missing/newer collections stay valid.
 export async function replaceAll(data) {
   cache = { ...EMPTY, ...data, settings: { ...EMPTY.settings, ...(data.settings || {}) } };
+  migrateMaintenance(cache);
   await persist();
   return cache;
 }
@@ -113,6 +126,7 @@ export async function mergeAll(remote) {
     db[c] = Array.from(byId.values());
   }
   db.settings = { ...(remote?.settings || {}), ...db.settings };
+  migrateMaintenance(db);
   await persist();
   return db;
 }

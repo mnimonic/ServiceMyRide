@@ -25,6 +25,7 @@ export default function VehicleDetail() {
   const [overrideDraft, setOverrideDraft] = useState({});
   const [photoSheet, setPhotoSheet] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
+  const [maintCollapsed, setMaintCollapsed] = useState(false);
 
   function newLog() {
     return { taskKeys: [], customLabels: [], customInput: '', dateStr: toDateInput(new Date().toISOString()), odometer: '', cost: '', notes: '' };
@@ -48,8 +49,13 @@ export default function VehicleDetail() {
     [vehicle, app.maintenance]
   );
 
+  const maintSummary = useMemo(() => ({
+    overdue: statuses.filter((st) => st.level === 'overdue').length,
+    soon: statuses.filter((st) => st.level === 'soon').length,
+  }), [statuses]);
+
   const history = useMemo(
-    () => app.maintenance.filter((m) => m.vehicleId === id).sort((a, b) => new Date(b.date) - new Date(a.date)),
+    () => app.maintenance.filter((m) => m.vehicleId === id).sort((a, b) => (b.odometer ?? -Infinity) - (a.odometer ?? -Infinity)),
     [app.maintenance, id]
   );
 
@@ -141,30 +147,30 @@ export default function VehicleDetail() {
     });
   }
 
-  async function saveLog() {
-    const items = [
-      ...log.taskKeys.map((key) => ({
+  function buildTasks(taskKeys, customLabels) {
+    return [
+      ...taskKeys.map((key) => ({
         taskKey: key,
         label: MAINTENANCE_PRESETS.find((p) => p.key === key)?.label || key,
       })),
-      ...log.customLabels.map((label, i) => ({ taskKey: `custom_${Date.now()}_${i}`, label })),
+      ...customLabels.map((label, i) => ({ taskKey: `custom_${Date.now()}_${i}`, label })),
     ];
-    if (items.length === 0) return;
+  }
+
+  async function saveLog() {
+    const tasks = buildTasks(log.taskKeys, log.customLabels);
+    if (tasks.length === 0) return;
     const parsedDate = parseDateInput(log.dateStr);
     if (!parsedDate) { Alert.alert('Invalid date', 'Use format YYYY-MM-DD.'); return; }
-    const isoDate = parsedDate.toISOString();
 
-    for (const item of items) {
-      await app.insert('maintenance', {
-        vehicleId: id,
-        taskKey: item.taskKey,
-        label: item.label,
-        date: isoDate,
-        odometer: log.odometer ? Number(log.odometer) : null,
-        cost: log.cost ? Number(log.cost) : null,
-        notes: log.notes,
-      });
-    }
+    await app.insert('maintenance', {
+      vehicleId: id,
+      tasks,
+      date: parsedDate.toISOString(),
+      odometer: log.odometer ? Number(log.odometer) : null,
+      cost: log.cost ? Number(log.cost) : null,
+      notes: log.notes,
+    });
     // Bump vehicle odometer if the logged reading is higher
     if (log.odometer && Number(log.odometer) > (vehicle.odometer || 0)) {
       await app.update('vehicles', id, { odometer: Number(log.odometer) });
@@ -204,15 +210,23 @@ export default function VehicleDetail() {
   function confirmDeleteHistory(h) {
     confirmAction(
       'Delete this service record?',
-      `${h.label} on ${fmtDate(h.date)} will be permanently removed.`,
+      `${h.tasks.map((t) => t.label).join(', ')} on ${fmtDate(h.date)} will be permanently removed.`,
       () => app.remove('maintenance', h.id)
     );
   }
 
   function openEditRecord(h) {
+    const taskKeys = [];
+    const customLabels = [];
+    h.tasks.forEach((t) => {
+      if (MAINTENANCE_PRESETS.some((p) => p.key === t.taskKey)) taskKeys.push(t.taskKey);
+      else customLabels.push(t.label);
+    });
     setEditingRecord({
       id: h.id,
-      label: h.label,
+      taskKeys,
+      customLabels,
+      customInput: '',
       dateStr: toDateInput(h.date),
       odometer: h.odometer != null ? String(h.odometer) : '',
       cost: h.cost != null ? String(h.cost) : '',
@@ -220,11 +234,32 @@ export default function VehicleDetail() {
     });
   }
 
+  function toggleEditPresetTask(key) {
+    setEditingRecord({
+      ...editingRecord,
+      taskKeys: editingRecord.taskKeys.includes(key)
+        ? editingRecord.taskKeys.filter((k) => k !== key)
+        : [...editingRecord.taskKeys, key],
+    });
+  }
+
+  function addEditCustomTask() {
+    const label = editingRecord.customInput.trim();
+    if (!label) return;
+    setEditingRecord({ ...editingRecord, customLabels: [...editingRecord.customLabels, label], customInput: '' });
+  }
+
+  function removeEditCustomTask(label) {
+    setEditingRecord({ ...editingRecord, customLabels: editingRecord.customLabels.filter((l) => l !== label) });
+  }
+
   async function saveEditRecord() {
+    const tasks = buildTasks(editingRecord.taskKeys, editingRecord.customLabels);
+    if (tasks.length === 0) return;
     const parsedDate = parseDateInput(editingRecord.dateStr);
     if (!parsedDate) { Alert.alert('Invalid date', 'Use format YYYY-MM-DD.'); return; }
     await app.update('maintenance', editingRecord.id, {
-      label: editingRecord.label.trim() || editingRecord.label,
+      tasks,
       date: parsedDate.toISOString(),
       odometer: editingRecord.odometer ? Number(editingRecord.odometer) : null,
       cost: editingRecord.cost ? Number(editingRecord.cost) : null,
@@ -304,36 +339,16 @@ export default function VehicleDetail() {
         )}
       </Card>
 
-      {/* Maintenance status */}
-      <View style={s.headerRow}>
-        <Text style={s.section}>Maintenance</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button title="Customize" variant="ghost" small onPress={openCustomize} />
-          <Button title="+ Log service" onPress={() => setLogging(true)} small />
-        </View>
-      </View>
-
-      <Card>
-        {statuses.length === 0 ? <Empty text="No maintenance tasks enabled for this vehicle." /> : statuses.map((st) => (
-          <TouchableOpacity key={st.preset.key} style={s.maintRow}
-            onPress={() => { setLog({ ...newLog(), taskKeys: [st.preset.key], odometer: String(vehicle.odometer || '') }); setLogging(true); }}>
-            <View style={[s.dot, { backgroundColor: levelColor(st.level, C) }]} />
-            <View style={{ flex: 1 }}>
-              <Text style={s.body}>{st.preset.label}</Text>
-              <Text style={s.dim}>{st.last ? `Last: ${fmtDate(st.last.date)}${st.last.odometer ? ` @ ${st.last.odometer}km` : ''} · ${st.detail}` : st.detail}</Text>
-            </View>
-            <Badge label={st.level === 'overdue' ? 'Overdue' : st.level === 'soon' ? 'Soon' : 'OK'} color={levelColor(st.level, C)} />
-          </TouchableOpacity>
-        ))}
-      </Card>
-
       {/* History */}
-      <Text style={s.section}>Service History</Text>
+      <View style={s.headerRow}>
+        <Text style={s.section}>Service History</Text>
+        <Button title="+ Log service" onPress={() => setLogging(true)} small />
+      </View>
       <Card>
         {history.length === 0 ? <Empty text="No service logged yet." /> : history.map((h) => (
           <View key={h.id} style={s.histRow}>
             <View style={{ flex: 1 }}>
-              <Text style={s.body}>{h.label}</Text>
+              <Text style={s.body}>{h.tasks.map((t) => t.label).join(', ')}</Text>
               <Text style={s.dim}>{fmtDate(h.date)}{h.odometer ? ` · ${h.odometer}km` : ''}{h.cost ? ` · €${h.cost}` : ''}{h.notes ? ` · ${h.notes}` : ''}</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: 14 }}>
@@ -343,6 +358,39 @@ export default function VehicleDetail() {
           </View>
         ))}
       </Card>
+
+      {/* Maintenance status */}
+      <TouchableOpacity style={s.headerRow} activeOpacity={0.7} onPress={() => setMaintCollapsed((c) => !c)}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={s.section}>Maintenance</Text>
+          <Text style={s.collapseArrow}>{maintCollapsed ? '▸' : '▾'}</Text>
+        </View>
+        {maintCollapsed ? (
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {maintSummary.overdue > 0 && <Badge label={`${maintSummary.overdue} overdue`} color={levelColor('overdue', C)} />}
+            {maintSummary.soon > 0 && <Badge label={`${maintSummary.soon} soon`} color={levelColor('soon', C)} />}
+            {maintSummary.overdue === 0 && maintSummary.soon === 0 && <Badge label="OK" color={levelColor('ok', C)} />}
+          </View>
+        ) : (
+          <Button title="Customize" variant="ghost" small onPress={openCustomize} />
+        )}
+      </TouchableOpacity>
+
+      {!maintCollapsed && (
+        <Card>
+          {statuses.length === 0 ? <Empty text="No maintenance tasks enabled for this vehicle." /> : statuses.map((st) => (
+            <TouchableOpacity key={st.preset.key} style={s.maintRow}
+              onPress={() => { setLog({ ...newLog(), taskKeys: [st.preset.key], odometer: String(vehicle.odometer || '') }); setLogging(true); }}>
+              <View style={[s.dot, { backgroundColor: levelColor(st.level, C) }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.body}>{st.preset.label}</Text>
+                <Text style={s.dim}>{st.last ? `Last: ${fmtDate(st.last.date)}${st.last.odometer ? ` @ ${st.last.odometer}km` : ''} · ${st.detail}` : st.detail}</Text>
+              </View>
+              <Badge label={st.level === 'overdue' ? 'Overdue' : st.level === 'soon' ? 'Soon' : 'OK'} color={levelColor(st.level, C)} />
+            </TouchableOpacity>
+          ))}
+        </Card>
+      )}
 
       {/* Drives */}
       <Text style={s.section}>Recent Drives</Text>
@@ -392,7 +440,25 @@ export default function VehicleDetail() {
       <Sheet visible={!!editingRecord} onClose={() => setEditingRecord(null)} title="Edit Service Record">
         {editingRecord && (
           <>
-            <Field label="Task" value={editingRecord.label} onChangeText={(v) => setEditingRecord({ ...editingRecord, label: v })} />
+            <Text style={s.dim}>Tasks done in this visit</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginVertical: 8 }}>
+              {presetsForType.map((p) => (
+                <Chip key={p.key} label={p.label} active={editingRecord.taskKeys.includes(p.key)} onPress={() => toggleEditPresetTask(p.key)} />
+              ))}
+            </View>
+            {editingRecord.customLabels.length > 0 && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
+                {editingRecord.customLabels.map((label) => (
+                  <Chip key={label} label={label} icon="✕" active onPress={() => removeEditCustomTask(label)} />
+                ))}
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Field label="Custom task" value={editingRecord.customInput} onChangeText={(v) => setEditingRecord({ ...editingRecord, customInput: v })} placeholder="e.g. Valve clearance" />
+              </View>
+              <Button title="Add" variant="secondary" small onPress={addEditCustomTask} style={{ marginBottom: 14 }} />
+            </View>
             <Field label="Date (YYYY-MM-DD)" value={editingRecord.dateStr} onChangeText={(v) => setEditingRecord({ ...editingRecord, dateStr: v })} placeholder="2026-07-04" />
             <Field label="Odometer (km)" value={editingRecord.odometer} onChangeText={(v) => setEditingRecord({ ...editingRecord, odometer: v })} keyboardType="numeric" placeholder={String(vehicle.odometer || '')} />
             <Field label="Cost (€)" value={editingRecord.cost} onChangeText={(v) => setEditingRecord({ ...editingRecord, cost: v })} keyboardType="numeric" placeholder="Optional" />

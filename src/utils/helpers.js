@@ -49,10 +49,30 @@ export function getEffectiveMaintenancePresets(vehicle) {
 export function computeMaintenanceStatus(vehicle, maintenanceRecords) {
   const presets = getEffectiveMaintenancePresets(vehicle);
   return presets.map((preset) => {
-    const history = maintenanceRecords
-      .filter((m) => m.vehicleId === vehicle.id && m.taskKey === preset.key)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-    const last = history[0];
+    const history = maintenanceRecords.filter(
+      (m) => m.vehicleId === vehicle.id && m.tasks.some((t) => t.taskKey === preset.key)
+    );
+
+    // Reference record for the time-based check: whichever has the latest
+    // date, regardless of the order records were inserted in. Ties (e.g. two
+    // records logged on the same day) break on odometer, not insertion order.
+    const lastByDate = history.reduce((best, m) => {
+      if (!best) return m;
+      const md = new Date(m.date).getTime();
+      const bd = new Date(best.date).getTime();
+      if (md !== bd) return md > bd ? m : best;
+      return (m.odometer ?? -Infinity) > (best.odometer ?? -Infinity) ? m : best;
+    }, null);
+
+    // Reference record for the odometer-based check: whichever has the
+    // highest odometer reading, independent of date/insertion order — a
+    // vehicle's odometer only increases, no matter when a service gets logged.
+    const lastByOdo = history.reduce((best, m) => {
+      if (m.odometer == null) return best;
+      return !best || m.odometer > best.odometer ? m : best;
+    }, null);
+
+    const last = lastByDate;
 
     let level = 'ok';
     let detail = 'Never done';
@@ -61,7 +81,7 @@ export function computeMaintenanceStatus(vehicle, maintenanceRecords) {
       detail = '';
       // Time-based check
       if (preset.intervalMonths) {
-        const nextDate = new Date(last.date);
+        const nextDate = new Date(lastByDate.date);
         nextDate.setMonth(nextDate.getMonth() + preset.intervalMonths);
         const days = daysUntil(nextDate);
         if (days < 0) level = 'overdue';
@@ -72,8 +92,8 @@ export function computeMaintenanceStatus(vehicle, maintenanceRecords) {
         })}`;
       }
       // Odometer-based check
-      if (preset.intervalKm && last.odometer && vehicle.odometer) {
-        const nextKm = Number(last.odometer) + preset.intervalKm;
+      if (preset.intervalKm && lastByOdo && vehicle.odometer) {
+        const nextKm = Number(lastByOdo.odometer) + preset.intervalKm;
         const remaining = nextKm - Number(vehicle.odometer);
         if (remaining < 0) level = 'overdue';
         else if (remaining <= 500 && level !== 'overdue') level = 'soon';

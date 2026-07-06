@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import * as db from '../storage/db';
 import {
   findBackupFile, uploadBackup, downloadBackup, fetchUserInfo,
@@ -50,6 +50,10 @@ function reversedClientIdScheme(clientId) {
 
 const NATIVE_REDIRECT_SCHEME = Platform.OS === 'ios' ? reversedClientIdScheme(CLIENT_IDS.iosClientId) : null;
 
+function isSignInRequiredError(e) {
+  return e?.code === statusCodes.SIGN_IN_REQUIRED;
+}
+
 export function AuthProvider({ children, onDataChanged }) {
   const [user, setUser] = useState(null);          // { name, email, picture }
   const [token, setToken] = useState(null);        // access token
@@ -86,6 +90,26 @@ export function AuthProvider({ children, onDataChanged }) {
           setUser(saved.user || null);
           setToken(saved.token || null);
           setSyncState((s) => ({ ...s, lastSync: saved.lastSync || null }));
+        }
+        // Android: the native module's in-memory session doesn't survive a
+        // cold start on its own, even though Play Services still holds a
+        // refresh token on-device. Re-establish it via signInSilently (no UI)
+        // so getTokens() below returns a live access token instead of the one
+        // we cached (which may be hours old by now).
+        if (Platform.OS === 'android' && GoogleSignin.hasPreviousSignIn()) {
+          const result = await GoogleSignin.signInSilently();
+          if (result.type === 'success') {
+            const { user: u } = result.data;
+            const tokens = await GoogleSignin.getTokens();
+            const profile = { name: u.name, email: u.email, picture: u.photo };
+            setUser(profile);
+            setToken(tokens.accessToken);
+            await persistSession({ user: profile, token: tokens.accessToken });
+          } else {
+            // Play Services has no saved credential (revoked / signed out on
+            // device elsewhere) - our cached copy is stale, drop it.
+            await clearSession();
+          }
         }
       } catch (e) {}
       setReady(true);
@@ -146,21 +170,51 @@ export function AuthProvider({ children, onDataChanged }) {
     promptAsync();
   }, [configured, promptAsync]);
 
-  const signOut = useCallback(async () => {
+  const clearSession = useCallback(async () => {
     if (Platform.OS === 'android') {
       try { await GoogleSignin.signOut(); } catch (e) {}
     }
     setUser(null);
     setToken(null);
     await AsyncStorage.removeItem(AUTH_KEY);
-    setSyncState({ status: 'idle', lastSync: null, error: null });
   }, []);
+
+  const signOut = useCallback(async () => {
+    await clearSession();
+    setSyncState({ status: 'idle', lastSync: null, error: null });
+  }, [clearSession]);
+
+  // Shared 401 handling: access tokens expire (~1hr) and there's no backend to
+  // hold a refresh token, so the only recovery is forcing the user to sign in
+  // again. Setting syncState *after* clearSession (not before) so signOut's
+  // own state reset can't clobber the "Session expired" message.
+  const handleExpiredToken = useCallback(async () => {
+    await clearSession();
+    setSyncState((s) => ({ status: 'expired', lastSync: s.lastSync, error: 'Session expired, sign in again' }));
+  }, [clearSession]);
+
+  // On Android, Play Services holds its own refresh token and can mint a new
+  // access token with no UI, so always ask it for a current one right before
+  // hitting the Drive API rather than trusting whatever we cached at sign-in
+  // (which may be well past its ~1hr expiry by now). iOS/web have no refresh
+  // mechanism (see CLAUDE.md), so fall back to the token we already have.
+  // Throws (SIGN_IN_REQUIRED) only if the on-device session is truly gone.
+  const getFreshToken = useCallback(async (fallback) => {
+    if (Platform.OS !== 'android') return fallback;
+    const tokens = await GoogleSignin.getTokens();
+    if (tokens.accessToken !== token) {
+      setToken(tokens.accessToken);
+      await persistSession({ token: tokens.accessToken });
+    }
+    return tokens.accessToken;
+  }, [token]);
 
   // Core sync: pull remote (merge into local), then push merged result up.
   const syncNow = useCallback(async (tok = token, usr = user) => {
     if (!tok) return;
     setSyncState((s) => ({ ...s, status: 'syncing', error: null }));
     try {
+      tok = await getFreshToken(tok);
       const existing = await findBackupFile(tok);
       if (existing) {
         const remote = await downloadBackup(tok, existing.id);
@@ -173,51 +227,61 @@ export function AuthProvider({ children, onDataChanged }) {
       await persistSession({ lastSync });
       onDataChanged && onDataChanged(); // let app refresh from storage
     } catch (e) {
-      // 401 -> token expired; force re-auth
       const msg = String(e.message || e);
-      if (msg.includes('401')) {
-        setSyncState({ status: 'expired', lastSync: syncState.lastSync, error: 'Session expired, sign in again' });
-        await signOut();
+      if (msg.includes('401') || isSignInRequiredError(e)) {
+        await handleExpiredToken();
       } else {
         setSyncState((s) => ({ ...s, status: 'error', error: msg }));
       }
     }
-  }, [token, user, onDataChanged, signOut, syncState.lastSync]);
+  }, [token, user, onDataChanged, handleExpiredToken, getFreshToken]);
 
   // Explicit "push my current data up" (overwrites merge order toward local)
   const backupNow = useCallback(async () => {
     if (!token) return;
     setSyncState((s) => ({ ...s, status: 'syncing', error: null }));
     try {
-      const existing = await findBackupFile(token);
+      const tok = await getFreshToken(token);
+      const existing = await findBackupFile(tok);
       const data = await db.dump();
-      const fileMeta = await uploadBackup(token, data, existing?.id);
+      const fileMeta = await uploadBackup(tok, data, existing?.id);
       const lastSync = fileMeta.modifiedTime || new Date().toISOString();
       setSyncState({ status: 'idle', lastSync, error: null });
       await persistSession({ lastSync });
     } catch (e) {
-      setSyncState((s) => ({ ...s, status: 'error', error: String(e.message || e) }));
+      const msg = String(e.message || e);
+      if (msg.includes('401') || isSignInRequiredError(e)) {
+        await handleExpiredToken();
+      } else {
+        setSyncState((s) => ({ ...s, status: 'error', error: msg }));
+      }
     }
-  }, [token]);
+  }, [token, handleExpiredToken, getFreshToken]);
 
   // Explicit "replace local with cloud copy"
   const restoreNow = useCallback(async () => {
     if (!token) return;
     setSyncState((s) => ({ ...s, status: 'syncing', error: null }));
     try {
-      const existing = await findBackupFile(token);
+      const tok = await getFreshToken(token);
+      const existing = await findBackupFile(tok);
       if (!existing) {
         setSyncState((s) => ({ ...s, status: 'error', error: 'No cloud backup found' }));
         return;
       }
-      const remote = await downloadBackup(token, existing.id);
+      const remote = await downloadBackup(tok, existing.id);
       await db.replaceAll(remote);
       setSyncState({ status: 'idle', lastSync: new Date().toISOString(), error: null });
       onDataChanged && onDataChanged();
     } catch (e) {
-      setSyncState((s) => ({ ...s, status: 'error', error: String(e.message || e) }));
+      const msg = String(e.message || e);
+      if (msg.includes('401') || isSignInRequiredError(e)) {
+        await handleExpiredToken();
+      } else {
+        setSyncState((s) => ({ ...s, status: 'error', error: msg }));
+      }
     }
-  }, [token, onDataChanged]);
+  }, [token, onDataChanged, handleExpiredToken, getFreshToken]);
 
   const api = {
     user, token, ready, configured, syncState,

@@ -47,7 +47,7 @@ Three distinct operations, not to be confused:
 - **`backupNow`** ("Back up ↑"): overwrite the cloud file with local data, no merge.
 - **`restoreNow`** ("Restore ↓"): overwrite local data with the cloud file (`replaceAll`), no merge.
 
-A 401 during sync is treated as an expired token: the app force-signs-out rather than trying to refresh, because everything is client-side (no backend to hold a refresh token).
+A 401 during sync is treated as an expired token, but recovery is platform-split: on Android, `getFreshToken()` asks `GoogleSignin.getTokens()` for a current access token before every Drive call (Play Services holds its own refresh token and silently mints a new one, no UI) — a 401/`SIGN_IN_REQUIRED` only reaches `handleExpiredToken()` (force-sign-out) if that on-device session is truly gone. On launch, the restore effect similarly calls `GoogleSignin.signInSilently()` before trusting the cached token, since the native module's session doesn't survive a cold start on its own. iOS/web have no such refresh path (`expo-auth-session`'s implicit flow never returns a refresh token, and there's no backend to exchange one), so a 401 there always force-signs-out.
 
 Drive storage uses the `appDataFolder` scope (`src/utils/googleDrive.js`) — a hidden per-app folder — so only `drive.appdata` is requested, not full Drive access. The whole DB document is one file (`servicemyride-backup.json`); there's no per-collection sync.
 
