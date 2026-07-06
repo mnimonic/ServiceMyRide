@@ -4,13 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-ServiceMyRide — a cross-platform (Android/iOS/Web) vehicle service tracker built with React Native + Expo (expo-router, SDK 51). No backend: all data lives on-device in a single AsyncStorage JSON document, with optional Google Drive backup/sync.
+ServiceMyRide — a cross-platform (Android/iOS) vehicle service tracker built with React Native + Expo (expo-router, SDK 51). No backend: all data lives on-device in a single AsyncStorage JSON document, with optional Google Drive backup/sync. Web is not a supported target — the app relies on native modules (BLE, GPS, notifications, native Google Sign-In) throughout.
 
 ## Commands
 
 ```bash
 npm install       # install deps
-npm run web       # run in browser (fastest to preview; BLE/notifications no-op)
 npm start         # start Metro, then open in a dev build (see below)
 npm run android   # expo start --android
 npm run ios       # expo start --ios
@@ -37,7 +36,7 @@ Google Sign-In requires client IDs in `.env` (copied from `.env.example`, `EXPO_
 ### State: two independent contexts + an event bridge
 
 - `src/context/AppContext.js` wraps `db.js` in React state and re-`refresh()`es (a full re-read from storage) after every mutation. Screens consume it via `useApp()`.
-- `src/context/AuthContext.js` owns Google sign-in and Drive sync (`src/utils/googleDrive.js`), independently of `AppContext`. Sign-in is platform-split: Android uses `@react-native-google-signin/google-signin` (native Play Services flow — Google dropped custom-scheme redirect support for Android OAuth clients, so `expo-auth-session`'s browser-redirect flow can't work there), while iOS/web still use `expo-auth-session`. Both paths converge on the same `handleToken(accessToken)`.
+- `src/context/AuthContext.js` owns Google sign-in and Drive sync (`src/utils/googleDrive.js`), independently of `AppContext`. Sign-in is platform-split: Android uses `@react-native-google-signin/google-signin` (native Play Services flow — Google dropped custom-scheme redirect support for Android OAuth clients, so `expo-auth-session`'s browser-redirect flow can't work there), while iOS still uses `expo-auth-session`. Both paths converge on the same `handleToken(accessToken)`.
 - These two contexts deliberately don't import each other. Since a Drive sync/restore rewrites AsyncStorage out from under `AppContext`'s in-memory cache, `AuthContext` must trigger a reload — it does so through `src/context/refreshBridge.js`, a tiny module-level callback registry, wired up in `app/_layout.js` (`<AuthProvider onDataChanged={triggerRefresh}>`). If you add a third piece of cross-context state, follow this same one-directional bridge pattern rather than merging the two contexts or having them import each other.
 
 ### Sync semantics (`AuthContext` + `db.js`)
@@ -47,7 +46,7 @@ Three distinct operations, not to be confused:
 - **`backupNow`** ("Back up ↑"): overwrite the cloud file with local data, no merge.
 - **`restoreNow`** ("Restore ↓"): overwrite local data with the cloud file (`replaceAll`), no merge.
 
-A 401 during sync is treated as an expired token, but recovery is platform-split: on Android, `getFreshToken()` asks `GoogleSignin.getTokens()` for a current access token before every Drive call (Play Services holds its own refresh token and silently mints a new one, no UI) — a 401/`SIGN_IN_REQUIRED` only reaches `handleExpiredToken()` (force-sign-out) if that on-device session is truly gone. On launch, the restore effect similarly calls `GoogleSignin.signInSilently()` before trusting the cached token, since the native module's session doesn't survive a cold start on its own. iOS/web have no such refresh path (`expo-auth-session`'s implicit flow never returns a refresh token, and there's no backend to exchange one), so a 401 there always force-signs-out.
+A 401 during sync is treated as an expired token, but recovery is platform-split: on Android, `getFreshToken()` asks `GoogleSignin.getTokens()` for a current access token before every Drive call (Play Services holds its own refresh token and silently mints a new one, no UI) — a 401/`SIGN_IN_REQUIRED` only reaches `handleExpiredToken()` (force-sign-out) if that on-device session is truly gone. On launch, the restore effect similarly calls `GoogleSignin.signInSilently()` before trusting the cached token, since the native module's session doesn't survive a cold start on its own. iOS has no such refresh path (`expo-auth-session`'s implicit flow never returns a refresh token, and there's no backend to exchange one), so a 401 there always force-signs-out.
 
 Drive storage uses the `appDataFolder` scope (`src/utils/googleDrive.js`) — a hidden per-app folder — so only `drive.appdata` is requested, not full Drive access. The whole DB document is one file (`servicemyride-backup.json`); there's no per-collection sync.
 
@@ -57,7 +56,7 @@ Drive storage uses the `appDataFolder` scope (`src/utils/googleDrive.js`) — a 
 
 ### Bluetooth drive detection
 
-`src/utils/bluetooth.js` lazily `require()`s `react-native-ble-plx` (not a static import) so web bundling doesn't choke on the native module; `isSupported()` returns false on web. Connection state is detected by polling `isDeviceConnected` every 15s rather than event subscriptions — the comment in that file explains this is a pragmatic portable choice, not an accidental one. A vehicle is paired to a device by id/name; connect/disconnect open/close a drive session (see `app/vehicle/[id].js`).
+`src/utils/bluetooth.js` lazily `require()`s `react-native-ble-plx` (not a static import) so the module degrades gracefully (`isSupported()` returns false) if the native module isn't present, e.g. in Expo Go. Connection state is detected by polling `isDeviceConnected` every 15s rather than event subscriptions — the comment in that file explains this is a pragmatic portable choice, not an accidental one. A vehicle is paired to a device by id/name; connect/disconnect open/close a drive session (see `app/vehicle/[id].js`).
 
 ### Routing
 

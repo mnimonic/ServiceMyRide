@@ -10,7 +10,6 @@ Notifications.setNotificationHandler({
 });
 
 export async function ensurePermissions() {
-  if (Platform.OS === 'web') return false;
   const { status } = await Notifications.getPermissionsAsync();
   let final = status;
   if (status !== 'granted') {
@@ -28,7 +27,6 @@ export async function ensurePermissions() {
 
 // Schedule a notification at a specific Date, with optional repeat.
 export async function schedule({ title, body, date, repeat = 'none' }) {
-  if (Platform.OS === 'web') return null;
   const ok = await ensurePermissions();
   if (!ok) return null;
 
@@ -70,7 +68,7 @@ function buildTrigger(date, repeat) {
 }
 
 export async function cancel(notifId) {
-  if (!notifId || Platform.OS === 'web') return;
+  if (!notifId) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(notifId);
   } catch (e) {}

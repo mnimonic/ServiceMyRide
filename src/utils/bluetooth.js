@@ -6,18 +6,13 @@ import { Platform, PermissionsAndroid } from 'react-native';
 // (e.g. the car's handsfree/head-unit, or a helmet intercom / scooter dongle).
 // When that device connects, we consider the vehicle "in use" and open a drive
 // session; when it disconnects we close the session and can prompt to log km.
-//
-// On web, BLE is unavailable, so this module degrades to a no-op with manual
-// drive logging still available in the UI.
 
 let BleManager = null;
 let manager = null;
 
 function getManager() {
-  if (Platform.OS === 'web') return null;
   if (manager) return manager;
   try {
-    // Lazy require so web bundling doesn't choke on native module.
     const { BleManager: BM } = require('react-native-ble-plx');
     BleManager = BM;
     manager = new BleManager();
@@ -28,7 +23,7 @@ function getManager() {
 }
 
 export function isSupported() {
-  return Platform.OS !== 'web' && !!getManager();
+  return !!getManager();
 }
 
 // Declaring BLUETOOTH_SCAN/CONNECT/ACCESS_FINE_LOCATION in the manifest isn't

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, Platform, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { COLORS as C } from '../../src/constants';
@@ -154,11 +154,9 @@ export default function Account() {
             reminders to your own Google Drive, and sync across devices.
           </Text>
           <View style={{ height: 14 }} />
-          <GoogleButton onPress={auth.signIn} disabled={!auth.canPrompt && Platform.OS !== 'web'} />
+          <GoogleButton onPress={auth.signIn} disabled={!auth.canPrompt} />
           <Text style={[s.dim, { textAlign: 'center', marginTop: 10 }]}>
-            {Platform.OS === 'web'
-              ? 'A Google popup will open.'
-              : 'Requires a development/production build (not Expo Go).'}
+            Requires a development/production build (not Expo Go).
           </Text>
           {auth.syncState.error ? <Text style={[s.dim, { color: C.red, marginTop: 10 }]}>{auth.syncState.error}</Text> : null}
         </Card>

@@ -1,15 +1,11 @@
-import { Platform } from 'react-native';
-
 // Distance tracking for an open drive session, sourced from GPS since BLE
 // connect/disconnect only tells us a drive happened, not how far it went.
 
 let Location = null;
 
 function getLocation() {
-  if (Platform.OS === 'web') return null;
   if (Location) return Location;
   try {
-    // Lazy require, mirroring bluetooth.js, so web bundling doesn't choke.
     Location = require('expo-location');
   } catch (e) {
     Location = null;

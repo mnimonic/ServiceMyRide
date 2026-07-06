@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 import { Card, Button, Field, Chip, Sheet, Badge, Empty } from '../../src/components/ui';
@@ -209,7 +209,7 @@ export default function VehicleDetail() {
 
   function startPairing() {
     if (!isSupported()) {
-      Alert.alert('Not available', 'Bluetooth pairing works on a physical iOS/Android device, not on web or simulator. On web you can still log drives manually.');
+      Alert.alert('Not available', 'Bluetooth pairing works on a physical iOS/Android device, not on a simulator. You can still log drives manually.');
       return;
     }
     setDevices([]);
@@ -563,9 +563,7 @@ export default function VehicleDetail() {
       {/* Vehicle photo sheet */}
       <Sheet visible={photoSheet} onClose={() => setPhotoSheet(false)} title="Vehicle Photo">
         <Button title="Choose from library" onPress={choosePhotoFromLibrary} />
-        {Platform.OS !== 'web' && (
-          <Button title="Take photo" variant="secondary" onPress={capturePhoto} style={{ marginTop: 8 }} />
-        )}
+        <Button title="Take photo" variant="secondary" onPress={capturePhoto} style={{ marginTop: 8 }} />
         {vehicle.photo ? (
           <Button title="Remove photo" variant="ghost" onPress={removePhoto} style={{ marginTop: 8 }} />
         ) : null}

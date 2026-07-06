@@ -37,7 +37,7 @@ const SCOPES = [
 // expo-auth-session's browser-redirect flow can't work there anymore. Android
 // signs in through the native Play Services flow instead (no redirect URI —
 // Play Services authenticates the app via the package+SHA-1 already
-// registered on the Android OAuth client). iOS/web still use expo-auth-session.
+// registered on the Android OAuth client). iOS still uses expo-auth-session.
 //
 // iOS OAuth clients still redirect through the reversed-client-id scheme
 // Google issues per client (e.g. com.googleusercontent.apps.<client-id>),
@@ -196,7 +196,7 @@ export function AuthProvider({ children, onDataChanged }) {
   // On Android, Play Services holds its own refresh token and can mint a new
   // access token with no UI, so always ask it for a current one right before
   // hitting the Drive API rather than trusting whatever we cached at sign-in
-  // (which may be well past its ~1hr expiry by now). iOS/web have no refresh
+  // (which may be well past its ~1hr expiry by now). iOS has no refresh
   // mechanism (see CLAUDE.md), so fall back to the token we already have.
   // Throws (SIGN_IN_REQUIRED) only if the on-device session is truly gone.
   const getFreshToken = useCallback(async (fallback) => {

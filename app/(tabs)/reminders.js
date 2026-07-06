@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useApp } from '../../src/context/AppContext';
 import { Card, Button, Field, Chip, Sheet, Empty, Badge } from '../../src/components/ui';
 import { COLORS as C, REMINDER_REPEAT } from '../../src/constants';
@@ -62,12 +62,6 @@ export default function Reminders() {
         <Text style={s.title}>Reminders</Text>
         <Button title="+ New" onPress={() => setAdding(true)} small />
       </View>
-
-      {Platform.OS === 'web' && (
-        <Card style={{ borderColor: C.amber }}>
-          <Text style={s.dim}>Push notifications require the iOS/Android app. On web, reminders are stored but won't fire alerts.</Text>
-        </Card>
-      )}
 
       <Text style={s.subhead}>Quick add</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>

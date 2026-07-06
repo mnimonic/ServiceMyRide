@@ -47,9 +47,9 @@ Most vehicle-maintenance apps assume a cloud account, a subscription, or a fleet
 | 📦 **Parts inventory** | Track parts you've bought but not installed yet — category, quantity, cost, linked vehicle, and a mark-used/in-stock toggle, with total stock value. |
 | 📄 **Documents & due dates** | Insurance, registration/license, inspection, road tax, warranty — with an auto-scheduled expiry reminder N days ahead. |
 | ⏰ **Reminders** | One-off or repeating (daily/weekly/monthly) local notifications, with quick presets like "charge the battery." |
-| 📶 **Bluetooth drive detection** | Pair a vehicle with its Bluetooth device (head unit, helmet intercom, scooter dongle). A drive session auto-opens on connect and closes on disconnect — plus manual logging as a fallback (and the default on web). |
+| 📶 **Bluetooth drive detection** | Pair a vehicle with its Bluetooth device (head unit, helmet intercom, scooter dongle). A drive session auto-opens on connect and closes on disconnect — plus manual logging as a fallback. |
 | 📍 **GPS distance tracking** | Optionally track distance travelled during a drive session using device location. |
-| ☁️ **Google sign-in + Drive backup** | Back up all your data to a private folder in your own Google Drive and sync it across devices. Works on web, iOS, and Android. |
+| ☁️ **Google sign-in + Drive backup** | Back up all your data to a private folder in your own Google Drive and sync it across devices. Works on iOS and Android. |
 
 All data is stored locally via AsyncStorage as a single JSON document (easy to migrate to SQLite later). Google Drive is used only for backup/sync — the app works fully offline without signing in.
 
@@ -68,12 +68,6 @@ npm install
 ```
 
 ## Run
-
-**Web** — fastest way to preview; Bluetooth/notifications degrade to manual entry / no-op:
-
-```bash
-npm run web
-```
 
 **Android / iOS with native modules** (Bluetooth + notifications):
 
@@ -108,7 +102,7 @@ If an access token expires (401), the app signs you out so you can re-authentica
 <details>
 <summary><strong>Platform differences</strong></summary>
 
-Web and iOS use `expo-auth-session` for "Login with Google"; Android uses `@react-native-google-signin/google-signin` (a native Play Services flow), because **Google no longer supports custom-scheme redirects for Android OAuth clients** — the browser-redirect approach `expo-auth-session` relies on cannot work there anymore.
+iOS uses `expo-auth-session` for "Login with Google"; Android uses `@react-native-google-signin/google-signin` (a native Play Services flow), because **Google no longer supports custom-scheme redirects for Android OAuth clients** — the browser-redirect approach `expo-auth-session` relies on cannot work there anymore.
 
 All platforms use the Google Drive REST API for backup. Backups live in Drive's **`appDataFolder`** — a hidden, per-app folder — so the app only requests the narrow `drive.appdata` scope, and your backup never clutters your visible Drive.
 
@@ -121,7 +115,7 @@ All platforms use the Google Drive REST API for backup. Backups live in Drive's 
 2. **OAuth consent screen**: configure it (External is fine for personal use), add your email as a test user, and under **Data access → Add or remove scopes** add `.../auth/userinfo.email`, `.../auth/userinfo.profile`, and (search "Drive", from the **Google Drive API**) `.../auth/drive.appdata`.
 3. **Enable the Google Drive API** under APIs & Services → Library — the `drive.appdata` scope won't show up in step 2 until this is enabled.
 4. **Create credentials → OAuth client IDs**, one per platform you target:
-   - **Web application** — add your dev URL (e.g. `http://localhost:8081`) to *Authorized JavaScript origins* and the Expo auth redirect to *Authorized redirect URIs*. **This one is also required for Android**: the native sign-in library authenticates the app via Play Services (using the Android client below) but is *configured* with the Web client id.
+   - **Web application** — required for Android: the native sign-in library authenticates the app via Play Services (using the Android client below) but is *configured* with the Web client id. No JavaScript origin or redirect URI needs to be added since this app never runs the browser-based OAuth flow.
    - **iOS** — bundle id `com.servicemyride.app`.
    - **Android** — package `com.servicemyride.app` + the SHA-1 of your signing key (debug keystore for local dev-client builds: `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android`; production key via `eas credentials`).
 5. **Copy `.env.example` to `.env`** and paste the client IDs:
@@ -133,7 +127,7 @@ All platforms use the Google Drive REST API for backup. Backups live in Drive's 
 6. Rebuild (`npx expo prebuild` then `npx expo run:android`/`run:ios` — the Android sign-in library is a native module, so a Metro-only restart isn't enough after first install). Open the **Account** tab and tap **Continue with Google**.
 
 > [!NOTE]
-> Like Bluetooth and notifications, Google Sign-In needs a **development build** on device — it does not work in Expo Go. On web it works with just the Web client ID.
+> Like Bluetooth and notifications, Google Sign-In needs a **development build** on device — it does not work in Expo Go.
 
 </details>
 
@@ -181,7 +175,7 @@ BLE `isDeviceConnected` polling (every 15s) is used as a portable approach that 
 
 Issues and pull requests are welcome. There's no test suite, lint config, or build/typecheck script in this repo yet, so please:
 
-- Keep changes scoped and test them by actually running the app (`npm run web` for a quick check, a dev build for Bluetooth/notifications/GPS).
+- Keep changes scoped and test them by actually running the app on a dev build (Bluetooth/notifications/GPS require native modules, so Expo Go isn't enough).
 - Follow the existing patterns — see `src/storage/db.js` for the data layer and `src/components/ui.js` for shared UI primitives — rather than introducing new ones for the same purpose.
 - Open an issue first for larger changes (new record types, new sync behavior) so the approach can be discussed before you invest the time.
 

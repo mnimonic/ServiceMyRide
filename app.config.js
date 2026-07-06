@@ -53,11 +53,6 @@ module.exports = {
         'android.permission.POST_NOTIFICATIONS',
       ],
     },
-    web: {
-      bundler: 'metro',
-      output: 'single',
-      favicon: './assets/favicon.png',
-    },
     plugins: [
       'expo-router',
       'expo-notifications',
