@@ -25,7 +25,7 @@ export default function VehicleDetail() {
   const [overrideDraft, setOverrideDraft] = useState({});
   const [photoSheet, setPhotoSheet] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
-  const [maintCollapsed, setMaintCollapsed] = useState(false);
+  const [maintCollapsed, setMaintCollapsed] = useState(true);
 
   function newLog() {
     return { taskKeys: [], customLabels: [], customInput: '', dateStr: toDateInput(new Date().toISOString()), odometer: '', cost: '', notes: '' };
@@ -301,12 +301,13 @@ export default function VehicleDetail() {
       {/* Header card */}
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <TouchableOpacity onPress={() => setPhotoSheet(true)}>
+          <TouchableOpacity onPress={() => setPhotoSheet(true)} style={s.photoWrap}>
             {vehicle.photo ? (
               <Image source={{ uri: vehicle.photo }} style={s.photo} />
             ) : (
               <View style={s.photoPlaceholder}><Text style={{ fontSize: 32 }}>{type?.icon}</Text></View>
             )}
+            <View style={s.photoEditBadge}><Text style={s.photoEditIcon}>✎</Text></View>
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={s.name}>{vehicle.name}</Text>
@@ -539,15 +540,22 @@ const s = StyleSheet.create({
   sub: { color: C.textDim, fontSize: 13, marginTop: 2 },
   h: { color: C.text, fontSize: 16, fontWeight: '700', marginBottom: 8 },
   section: { color: C.text, fontSize: 18, fontWeight: '700', marginTop: 18, marginBottom: 10 },
-  collapseArrow: { color: C.textDim, fontSize: 14 },
+  collapseArrow: { color: C.textDim, fontSize: 35, fontWeight: '700', paddingTop: 7 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 18, marginBottom: 10 },
   body: { color: C.text, fontSize: 15, fontWeight: '500' },
   dim: { color: C.textDim, fontSize: 13, marginTop: 2 },
+  photoWrap: { position: 'relative' },
   photo: { width: 64, height: 64, borderRadius: 32 },
   photoPlaceholder: {
     width: 64, height: 64, borderRadius: 32, backgroundColor: C.cardAlt,
     alignItems: 'center', justifyContent: 'center',
   },
+  photoEditBadge: {
+    position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11,
+    backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: C.bg,
+  },
+  photoEditIcon: { color: C.bg, fontSize: 12, fontWeight: '700' },
   odoBox: { marginTop: 14, backgroundColor: C.bg, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border },
   odoLabel: { color: C.textDim, fontSize: 12 },
   odoVal: { color: C.accent, fontSize: 18, fontWeight: '700', marginTop: 2 },

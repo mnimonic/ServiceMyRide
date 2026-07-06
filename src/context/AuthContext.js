@@ -6,7 +6,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import * as db from '../storage/db';
 import {
-  findBackupFile, uploadBackup, downloadBackup, fetchUserInfo,
+  findBackupFile, uploadBackup, downloadBackup, deleteBackup, fetchUserInfo,
 } from '../utils/googleDrive';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -283,9 +283,30 @@ export function AuthProvider({ children, onDataChanged }) {
     }
   }, [token, onDataChanged, handleExpiredToken, getFreshToken]);
 
+  // Permanently delete the cloud backup file only — local on-device data is
+  // never touched by this (contrast with restoreNow, which overwrites local).
+  const deleteCloudBackup = useCallback(async () => {
+    if (!token) return;
+    setSyncState((s) => ({ ...s, status: 'syncing', error: null }));
+    try {
+      const tok = await getFreshToken(token);
+      const existing = await findBackupFile(tok);
+      if (existing) await deleteBackup(tok, existing.id);
+      setSyncState({ status: 'idle', lastSync: null, error: null });
+      await persistSession({ lastSync: null });
+    } catch (e) {
+      const msg = String(e.message || e);
+      if (msg.includes('401') || isSignInRequiredError(e)) {
+        await handleExpiredToken();
+      } else {
+        setSyncState((s) => ({ ...s, status: 'error', error: msg }));
+      }
+    }
+  }, [token, handleExpiredToken, getFreshToken]);
+
   const api = {
     user, token, ready, configured, syncState,
-    signIn, signOut, syncNow, backupNow, restoreNow,
+    signIn, signOut, syncNow, backupNow, restoreNow, deleteCloudBackup,
     canPrompt: Platform.OS === 'android' ? true : !!request,
     isSignedIn: !!user,
   };

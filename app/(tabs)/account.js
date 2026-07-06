@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Image, Platform, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { COLORS as C } from '../../src/constants';
 import { fmtDate } from '../../src/utils/helpers';
+import { confirmAction } from '../../src/utils/confirm';
 
 function GoogleButton({ onPress, disabled }) {
   return (
@@ -42,6 +43,22 @@ export default function Account() {
     if (st === 'error' || st === 'expired') return C.red;
     if (st === 'syncing') return C.amber;
     return C.green;
+  }
+
+  function confirmDeleteCloudBackup() {
+    confirmAction(
+      'Delete cloud backup?',
+      'This permanently deletes your backup file from Google Drive. Nothing on this device is affected — it stays exactly as it is.',
+      () => {
+        confirmAction(
+          'Are you sure?',
+          'This cannot be undone. Once deleted, the Google Drive backup cannot be recovered.',
+          () => auth.deleteCloudBackup(),
+          'Delete permanently'
+        );
+      },
+      'Continue'
+    );
   }
 
   return (
@@ -112,6 +129,21 @@ export default function Account() {
             </Text>
           </Card>
 
+          <Card style={{ borderColor: C.red }}>
+            <Text style={s.h}>Delete cloud backup</Text>
+            <Text style={s.dim}>
+              Permanently removes your backup file from Google Drive. Your vehicles, logs, documents
+              and reminders on this device are not touched.
+            </Text>
+            <View style={{ height: 12 }} />
+            <Button
+              title="Delete cloud backup"
+              variant="danger"
+              small
+              onPress={confirmDeleteCloudBackup}
+            />
+          </Card>
+
           <Button title="Sign out" variant="danger" onPress={auth.signOut} style={{ marginTop: 8 }} />
         </>
       ) : (
@@ -135,6 +167,15 @@ export default function Account() {
       <Text style={[s.dim, { marginTop: 16, textAlign: 'center' }]}>
         Data is always kept on your device too — Google Drive is only for backup and multi-device sync.
       </Text>
+
+      <Text style={[s.dim, { marginTop: 24, textAlign: 'center', fontSize: 11 }]}>
+        ServiceMyRide is free and open source.{'\n'}Developed by George Danilopoulos.
+      </Text>
+      <TouchableOpacity onPress={() => Linking.openURL('https://github.com/mnimonic/ServiceMyRide')}>
+        <Text style={[s.dim, { marginTop: 4, textAlign: 'center', fontSize: 11, color: C.accent }]}>
+          View source on GitHub
+        </Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }

@@ -72,6 +72,16 @@ export async function downloadBackup(token, fileId) {
   return res.json();
 }
 
+// Permanently delete the backup file from appDataFolder. Local on-device data
+// is untouched by this — it only removes the remote copy.
+export async function deleteBackup(token, fileId) {
+  const res = await fetch(`${DRIVE_FILES}/${fileId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`Drive delete failed: ${res.status} ${await safeText(res)}`);
+}
+
 // Fetch the signed-in user's basic profile (name, email, picture).
 export async function fetchUserInfo(token) {
   const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
