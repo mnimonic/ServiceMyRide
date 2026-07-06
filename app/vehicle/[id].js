@@ -27,6 +27,13 @@ export default function VehicleDetail() {
   const [photoSheet, setPhotoSheet] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [maintCollapsed, setMaintCollapsed] = useState(true);
+  const [manualLogging, setManualLogging] = useState(false);
+  const [manualLog, setManualLog] = useState(newManualLog());
+  const [editingDrive, setEditingDrive] = useState(null);
+
+  function newManualLog() {
+    return { dateStr: toDateInput(new Date().toISOString()), distanceKm: '' };
+  }
 
   function newLog() {
     return { taskKeys: [], customLabels: [], customInput: '', dateStr: toDateInput(new Date().toISOString()), odometer: '', cost: '', notes: '' };
@@ -236,6 +243,33 @@ export default function VehicleDetail() {
     );
   }
 
+  function confirmDeleteDrive(d) {
+    confirmAction(
+      'Delete this drive?',
+      `The drive on ${fmtDate(d.start)} will be permanently removed.`,
+      () => app.remove('drives', d.id)
+    );
+  }
+
+  function openEditDrive(d) {
+    setEditingDrive({ id: d.id, distanceKm: d.distanceKm != null ? String(d.distanceKm) : '' });
+  }
+
+  async function saveEditDrive() {
+    const distanceKm = editingDrive.distanceKm.trim() === '' ? null : Number(editingDrive.distanceKm);
+    await app.update('drives', editingDrive.id, { distanceKm });
+    setEditingDrive(null);
+  }
+
+  async function saveManualLog() {
+    const parsedDate = parseDateInput(manualLog.dateStr);
+    if (!parsedDate) { Alert.alert('Invalid date', 'Use format YYYY-MM-DD.'); return; }
+    const distanceKm = manualLog.distanceKm.trim() === '' ? null : Number(manualLog.distanceKm);
+    await app.insert('drives', { vehicleId: id, start: parsedDate.toISOString(), end: parsedDate.toISOString(), bleName: 'manual', distanceKm });
+    setManualLog(newManualLog());
+    setManualLogging(false);
+  }
+
   function openEditRecord(h) {
     const taskKeys = [];
     const customLabels = [];
@@ -419,12 +453,18 @@ export default function VehicleDetail() {
       <Card>
         {drives.length === 0 ? <Empty text="No drives recorded. Pair Bluetooth or log manually." /> : drives.slice(0, 10).map((d) => (
           <View key={d.id} style={s.histRow}>
-            <Text style={s.body}>{fmtDate(d.start)}</Text>
-            <Text style={s.dim}>{d.end ? 'completed' : 'in progress'}{d.distanceKm ? ` · ${d.distanceKm} km` : ''}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.body}>{fmtDate(d.start)}</Text>
+              <Text style={s.dim}>{d.end ? 'completed' : 'in progress'}{d.distanceKm ? ` · ${d.distanceKm} km` : ''}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 14 }}>
+              <TouchableOpacity onPress={() => openEditDrive(d)}><Text style={s.edit}>✎</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => confirmDeleteDrive(d)}><Text style={s.del}>✕</Text></TouchableOpacity>
+            </View>
           </View>
         ))}
         <Button title="+ Log drive manually" variant="ghost" small style={{ marginTop: 8 }}
-          onPress={async () => { await app.insert('drives', { vehicleId: id, start: new Date().toISOString(), end: new Date().toISOString(), bleName: 'manual' }); }} />
+          onPress={() => setManualLogging(true)} />
       </Card>
 
       <Button title="Delete vehicle" variant="danger" style={{ marginTop: 8 }} onPress={confirmDelete} />
@@ -488,6 +528,23 @@ export default function VehicleDetail() {
             <Button title="Save changes" onPress={saveEditRecord} style={{ marginTop: 12 }} />
           </>
         )}
+        <View style={{ height: 20 }} />
+      </Sheet>
+
+      {/* Manual drive log sheet */}
+      <Sheet visible={manualLogging} onClose={() => { setManualLogging(false); setManualLog(newManualLog()); }} title="Log Drive">
+        <Field label="Date (YYYY-MM-DD)" value={manualLog.dateStr} onChangeText={(v) => setManualLog({ ...manualLog, dateStr: v })} placeholder={toDateInput(new Date().toISOString())} />
+        <Field label="Distance (km)" value={manualLog.distanceKm} onChangeText={(v) => setManualLog({ ...manualLog, distanceKm: v })} keyboardType="numeric" placeholder="Optional" />
+        <Button title="Save drive" onPress={saveManualLog} style={{ marginTop: 12 }} />
+        <View style={{ height: 20 }} />
+      </Sheet>
+
+      {/* Edit drive distance sheet */}
+      <Sheet visible={!!editingDrive} onClose={() => setEditingDrive(null)} title="Edit Drive">
+        {editingDrive && (
+          <Field label="Distance (km)" value={editingDrive.distanceKm} onChangeText={(v) => setEditingDrive({ ...editingDrive, distanceKm: v })} keyboardType="numeric" placeholder="Optional" />
+        )}
+        <Button title="Save changes" onPress={saveEditDrive} style={{ marginTop: 12 }} />
         <View style={{ height: 20 }} />
       </Sheet>
 
