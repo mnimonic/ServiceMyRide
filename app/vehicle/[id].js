@@ -539,6 +539,7 @@ const s = StyleSheet.create({
   sub: { color: C.textDim, fontSize: 13, marginTop: 2 },
   h: { color: C.text, fontSize: 16, fontWeight: '700', marginBottom: 8 },
   section: { color: C.text, fontSize: 18, fontWeight: '700', marginTop: 18, marginBottom: 10 },
+  collapseArrow: { color: C.textDim, fontSize: 14 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 18, marginBottom: 10 },
   body: { color: C.text, fontSize: 15, fontWeight: '500' },
   dim: { color: C.textDim, fontSize: 13, marginTop: 2 },
