@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
@@ -6,6 +6,7 @@ import { Card, Button, Field, Chip, Sheet, Badge, Empty } from '../../src/compon
 import { COLORS as C, VEHICLE_TYPES, MAINTENANCE_PRESETS } from '../../src/constants';
 import { computeMaintenanceStatus, getEffectiveMaintenancePresets, levelColor, fmtDate } from '../../src/utils/helpers';
 import { isSupported, scanForDevices, monitorDevice } from '../../src/utils/bluetooth';
+import { startDistanceTracking } from '../../src/utils/location';
 import { confirmAction } from '../../src/utils/confirm';
 import { pickVehiclePhoto, takeVehiclePhoto } from '../../src/utils/image';
 
@@ -64,20 +65,40 @@ export default function VehicleDetail() {
     [app.drives, id]
   );
 
-  // Monitor paired bluetooth device -> auto open/close a drive session
+  // Kept fresh so the onDisconnect closure below always bumps from the
+  // latest odometer reading, not a stale one from when the effect was set up.
+  const vehicleRef = useRef(vehicle);
+  useEffect(() => { vehicleRef.current = vehicle; }, [vehicle]);
+
+  // Monitor paired bluetooth device -> auto open/close a drive session,
+  // tracking GPS distance for the session's duration.
   useEffect(() => {
     if (!vehicle?.bleId || !isSupported()) return;
     let openDriveId = null;
+    let tracker = null;
     const stop = monitorDevice(vehicle.bleId, {
       onConnect: async () => {
         const d = await app.insert('drives', { vehicleId: id, start: new Date().toISOString(), end: null, bleName: vehicle.bleName });
         openDriveId = d.id;
+        tracker = await startDistanceTracking();
       },
       onDisconnect: async () => {
-        if (openDriveId) { await app.update('drives', openDriveId, { end: new Date().toISOString() }); openDriveId = null; }
+        if (openDriveId) {
+          const distanceKm = tracker ? await tracker.stop() : 0;
+          await app.update('drives', openDriveId, { end: new Date().toISOString(), distanceKm: distanceKm || null });
+          if (distanceKm > 0) {
+            const current = vehicleRef.current?.odometer || 0;
+            await app.update('vehicles', id, { odometer: Math.round(current + distanceKm) });
+          }
+          openDriveId = null;
+          tracker = null;
+        }
       },
     });
-    return stop;
+    return () => {
+      stop();
+      if (tracker) tracker.stop();
+    };
   }, [vehicle?.bleId]);
 
   if (!vehicle) {
@@ -399,7 +420,7 @@ export default function VehicleDetail() {
         {drives.length === 0 ? <Empty text="No drives recorded. Pair Bluetooth or log manually." /> : drives.slice(0, 10).map((d) => (
           <View key={d.id} style={s.histRow}>
             <Text style={s.body}>{fmtDate(d.start)}</Text>
-            <Text style={s.dim}>{d.end ? 'completed' : 'in progress'}</Text>
+            <Text style={s.dim}>{d.end ? 'completed' : 'in progress'}{d.distanceKm ? ` · ${d.distanceKm} km` : ''}</Text>
           </View>
         ))}
         <Button title="+ Log drive manually" variant="ghost" small style={{ marginTop: 8 }}

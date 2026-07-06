@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 
 // Bluetooth drive-detection.
 //
@@ -31,6 +31,20 @@ export function isSupported() {
   return Platform.OS !== 'web' && !!getManager();
 }
 
+// Declaring BLUETOOTH_SCAN/CONNECT/ACCESS_FINE_LOCATION in the manifest isn't
+// enough on Android 6+ - they're dangerous permissions that also need a
+// runtime grant, or ble-plx throws "Device is not authorized to use
+// BluetoothLE" on every scan/connect. iOS has no equivalent step (CoreBluetooth
+// prompts on first use from the Info.plist strings already set in app.config.js).
+async function ensurePermissions() {
+  if (Platform.OS !== 'android') return true;
+  const perms = Platform.Version >= 31
+    ? [PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN, PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT]
+    : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+  const results = await PermissionsAndroid.requestMultiple(perms);
+  return perms.every((p) => results[p] === PermissionsAndroid.RESULTS.GRANTED);
+}
+
 // Scan for nearby/known devices so the user can pick one to associate.
 // Returns an unsubscribe function. Emits {id, name} for each discovered device.
 export function scanForDevices(onDevice, onError) {
@@ -40,25 +54,36 @@ export function scanForDevices(onDevice, onError) {
     return () => {};
   }
   const seen = new Set();
-  const sub = mgr.onStateChange((state) => {
-    if (state === 'PoweredOn') {
-      mgr.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
-        if (error) {
-          onError && onError(error);
-          return;
-        }
-        if (device && !seen.has(device.id)) {
-          seen.add(device.id);
-          onDevice({ id: device.id, name: device.name || device.localName || 'Unknown' });
-        }
-      });
+  let sub = null;
+  let stopped = false;
+
+  ensurePermissions().then((granted) => {
+    if (stopped) return;
+    if (!granted) {
+      onError && onError(new Error('Bluetooth permission was denied'));
+      return;
     }
-  }, true);
+    sub = mgr.onStateChange((state) => {
+      if (state === 'PoweredOn') {
+        mgr.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
+          if (error) {
+            onError && onError(error);
+            return;
+          }
+          if (device && !seen.has(device.id)) {
+            seen.add(device.id);
+            onDevice({ id: device.id, name: device.name || device.localName || 'Unknown' });
+          }
+        });
+      }
+    }, true);
+  });
 
   return () => {
+    stopped = true;
     try {
       mgr.stopDeviceScan();
-      sub.remove();
+      sub && sub.remove();
     } catch (e) {}
   };
 }
@@ -71,6 +96,7 @@ export function monitorDevice(deviceId, { onConnect, onDisconnect }) {
 
   let poll = null;
   let connected = false;
+  let stopped = false;
 
   async function check() {
     try {
@@ -85,10 +111,16 @@ export function monitorDevice(deviceId, { onConnect, onDisconnect }) {
     } catch (e) {}
   }
 
-  poll = setInterval(check, 15000);
-  check();
+  ensurePermissions().then((granted) => {
+    if (stopped || !granted) return;
+    poll = setInterval(check, 15000);
+    check();
+  });
 
-  return () => poll && clearInterval(poll);
+  return () => {
+    stopped = true;
+    poll && clearInterval(poll);
+  };
 }
 
 export function destroy() {

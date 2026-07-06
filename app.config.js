@@ -77,6 +77,12 @@ module.exports = {
           bluetoothAlwaysPermission: 'Detect vehicle Bluetooth connections to log drives.',
         },
       ],
+      [
+        'expo-location',
+        {
+          locationWhenInUsePermission: 'Used to measure drive distance while a paired vehicle is connected.',
+        },
+      ],
     ],
   },
 };
