@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet, Image, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
+import Constants from 'expo-constants';
 import { useAuth } from '../../src/context/AuthContext';
 import { Card, Button, Badge } from '../../src/components/ui';
 import { COLORS as C } from '../../src/constants';
@@ -174,7 +175,11 @@ export default function Account() {
           View source on GitHub
         </Text>
       </TouchableOpacity>
+      <Text style={[s.dim, { marginTop: 8, textAlign: 'center', fontSize: 11 }]}>
+        Version {Constants.expoConfig?.version ?? '—'}
+      </Text>
     </ScrollView>
+
   );
 }
 
