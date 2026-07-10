@@ -20,7 +20,7 @@ module.exports = {
   expo: {
     name: 'ServiceMyRide',
     slug: 'servicemyride',
-    version: '1.0.0',
+    version: '1.0.2',
     orientation: 'portrait',
     scheme: ['servicemyride', ...oauthSchemes],
     userInterfaceStyle: 'automatic',
@@ -33,13 +33,10 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.servicemyride.app',
-      infoPlist: {
-        NSBluetoothAlwaysUsageDescription: 'Used to detect when you are driving/riding a vehicle via its Bluetooth connection.',
-        NSBluetoothPeripheralUsageDescription: 'Used to detect vehicle Bluetooth connections.',
-      },
     },
     android: {
       package: 'com.servicemyride.app',
+      versionCode: 2,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#0f172a',
@@ -47,7 +44,6 @@ module.exports = {
       permissions: [
         'android.permission.BLUETOOTH',
         'android.permission.BLUETOOTH_ADMIN',
-        'android.permission.BLUETOOTH_SCAN',
         'android.permission.BLUETOOTH_CONNECT',
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.POST_NOTIFICATIONS',
@@ -62,14 +58,6 @@ module.exports = {
         {
           photosPermission: 'Used to set a photo for a vehicle.',
           cameraPermission: 'Used to take a photo of a vehicle.',
-        },
-      ],
-      [
-        'react-native-ble-plx',
-        {
-          isBackgroundEnabled: true,
-          modes: ['peripheral', 'central'],
-          bluetoothAlwaysPermission: 'Detect vehicle Bluetooth connections to log drives.',
         },
       ],
       [

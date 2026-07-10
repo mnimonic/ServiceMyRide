@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-ServiceMyRide — a cross-platform (Android/iOS) vehicle service tracker built with React Native + Expo (expo-router, SDK 51). No backend: all data lives on-device in a single AsyncStorage JSON document, with optional Google Drive backup/sync. Web is not a supported target — the app relies on native modules (BLE, GPS, notifications, native Google Sign-In) throughout.
+ServiceMyRide — a cross-platform (Android/iOS) vehicle service tracker built with React Native + Expo (expo-router, SDK 51). No backend: all data lives on-device in a single AsyncStorage JSON document, with optional Google Drive backup/sync. Web is not a supported target — the app relies on native modules (Classic Bluetooth, GPS, notifications, native Google Sign-In) throughout.
 
 ## Commands
 
@@ -17,7 +17,7 @@ npm run ios       # expo start --ios
 
 There is no test suite, lint config, or build/typecheck script in this repo — don't assume one exists.
 
-Native modules (`react-native-ble-plx`, `expo-notifications`) don't work in Expo Go. To test Bluetooth pairing or local notifications on a device, a dev client build is required:
+Native modules (the local `modules/servicemyride-bluetooth`, `expo-notifications`) don't work in Expo Go. To test Bluetooth drive detection or local notifications on a device, a dev client build is required:
 
 ```bash
 npx expo install expo-dev-client
@@ -56,11 +56,13 @@ Drive storage uses the `appDataFolder` scope (`src/utils/googleDrive.js`) — a 
 
 ### Bluetooth drive detection
 
-`src/utils/bluetooth.js` lazily `require()`s `react-native-ble-plx` (not a static import) so the module degrades gracefully (`isSupported()` returns false) if the native module isn't present, e.g. in Expo Go. Connection state is detected by polling `isDeviceConnected` every 15s rather than event subscriptions — the comment in that file explains this is a pragmatic portable choice, not an accidental one. A vehicle is paired to a device by id/name; connect/disconnect open/close a drive session (see `app/vehicle/[id].js`).
+Android only — there is no public API on iOS for a third-party app to enumerate already-paired Classic Bluetooth accessories or observe their connection state (Apple restricts that to MFi accessories via ExternalAccessory), so `src/utils/bluetooth.js:isSupported()` is hardcoded false off-Android.
+
+The app never scans for or initiates its own Bluetooth connection — the user pairs the vehicle's Bluetooth (head unit, intercom, dongle) once via the phone's own OS Bluetooth settings, then picks it from that already-paired/bonded list in `app/vehicle/[id].js`. `modules/servicemyride-bluetooth` is a local native module (Kotlin, autolinked from `./modules` — see its `expo-module.config.json`) that exposes `getBondedDevices()` and `startMonitoring(deviceId)`/`stopMonitoring()`. Monitoring registers an Android `BroadcastReceiver` for the system-level `ACTION_ACL_CONNECTED`/`ACTION_ACL_DISCONNECTED` intents (the same signal Android fires for any Classic Bluetooth link — HFP/A2DP/SPP — which is what virtually all vehicle Bluetooth uses, unlike BLE) filtered to the selected device's address, and emits `onDeviceConnected`/`onDeviceDisconnected` events back to JS. `src/utils/bluetooth.js` wraps that in `listPairedDevices()` and `monitorDevice(deviceId, {onConnect, onDisconnect})`; a vehicle stores the chosen device by id/name (`bleId`/`bleName`), and connect/disconnect open/close a drive session with GPS distance tracking (see `app/vehicle/[id].js`). This only runs while the vehicle detail screen is mounted — there's no background service.
 
 ### Routing
 
-`app/` uses expo-router file-based routing. `app/_layout.js` sets up the provider tree (`SafeAreaProvider > AppProvider > AuthProvider > Stack`) and global stack chrome. `app/(tabs)/` is the bottom-tab group (Garage/Reminders/Inventory/Documents/Account); `app/vehicle/[id].js` is the vehicle detail screen (maintenance history, BLE pairing, drives) reached from the Garage tab.
+`app/` uses expo-router file-based routing. `app/_layout.js` sets up the provider tree (`SafeAreaProvider > AppProvider > AuthProvider > Stack`) and global stack chrome. `app/(tabs)/` is the bottom-tab group (Garage/Reminders/Inventory/Documents/Account); `app/vehicle/[id].js` is the vehicle detail screen (maintenance history, Bluetooth device select, drives) reached from the Garage tab.
 
 ### UI
 

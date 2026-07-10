@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 import { Card, Button, Field, Chip, Sheet, Badge, Empty } from '../../src/components/ui';
 import { COLORS as C, VEHICLE_TYPES, MAINTENANCE_PRESETS } from '../../src/constants';
 import { computeMaintenanceStatus, getEffectiveMaintenancePresets, levelColor, fmtDate } from '../../src/utils/helpers';
-import { isSupported, scanForDevices, monitorDevice } from '../../src/utils/bluetooth';
+import { isSupported, listPairedDevices, monitorDevice } from '../../src/utils/bluetooth';
 import { startDistanceTracking } from '../../src/utils/location';
 import { confirmAction } from '../../src/utils/confirm';
 import { pickVehiclePhoto, takeVehiclePhoto } from '../../src/utils/image';
@@ -19,6 +19,7 @@ export default function VehicleDetail() {
   const [logging, setLogging] = useState(false);
   const [pairing, setPairing] = useState(false);
   const [devices, setDevices] = useState([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
   const [log, setLog] = useState(newLog());
   const [editingOdo, setEditingOdo] = useState(false);
   const [odo, setOdo] = useState('');
@@ -209,19 +210,21 @@ export default function VehicleDetail() {
     setLogging(false);
   }
 
-  function startPairing() {
+  async function openDeviceSelect() {
     if (!isSupported()) {
-      Alert.alert('Not available', 'Bluetooth pairing works on a physical iOS/Android device, not on a simulator. You can still log drives manually.');
+      Alert.alert('Not available', 'Auto drive-detection via Bluetooth needs a physical Android device (not a simulator, and not available on iOS). You can still log drives manually.');
       return;
     }
-    setDevices([]);
     setPairing(true);
-    const stop = scanForDevices(
-      (dev) => setDevices((prev) => (prev.find((d) => d.id === dev.id) ? prev : [...prev, dev])),
-      (err) => Alert.alert('Bluetooth error', String(err.message || err))
-    );
-    // stop scan when sheet closes
-    return stop;
+    setLoadingDevices(true);
+    try {
+      const paired = await listPairedDevices();
+      setDevices(paired);
+    } catch (err) {
+      Alert.alert('Bluetooth error', String(err.message || err));
+    } finally {
+      setLoadingDevices(false);
+    }
   }
 
   async function pickDevice(dev) {
@@ -399,24 +402,28 @@ export default function VehicleDetail() {
         </TouchableOpacity>
       </Card>
 
-      {/* Bluetooth pairing */}
-      <Card>
-        <Text style={s.h}>🔵 Drive Detection</Text>
-        {vehicle.bleId ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View>
-              <Text style={s.body}>Paired: {vehicle.bleName || 'device'}</Text>
-              <Text style={s.dim}>Drives auto-log when connected</Text>
+      {/* Bluetooth pairing - Android only, iOS has no API for this */}
+      {Platform.OS !== 'ios' && (
+        <Card>
+          <Text style={s.h}>🔵 Drive Detection</Text>
+          {vehicle.bleId ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={s.body}>Selected: {vehicle.bleName || 'device'}</Text>
+                <Text style={s.dim}>Drives auto-log while your phone is connected to it</Text>
+              </View>
+              <Button title="Remove" variant="ghost" small onPress={() => app.update('vehicles', id, { bleId: null, bleName: null })} />
             </View>
-            <Button title="Unpair" variant="ghost" small onPress={() => app.update('vehicles', id, { bleId: null, bleName: null })} />
-          </View>
-        ) : (
-          <>
-            <Text style={s.dim}>Pair the vehicle's Bluetooth (head unit, intercom, dongle) to auto-detect when you drive.</Text>
-            <Button title="Pair Bluetooth device" variant="secondary" small style={{ marginTop: 10 }} onPress={startPairing} />
-          </>
-        )}
-      </Card>
+          ) : isSupported() ? (
+            <>
+              <Text style={s.dim}>Select a Bluetooth device your phone is already paired with (head unit, intercom, dongle) to auto-detect when you drive. Pair it in your phone's Bluetooth settings first if you haven't.</Text>
+              <Button title="Select paired device" variant="secondary" small style={{ marginTop: 10 }} onPress={openDeviceSelect} />
+            </>
+          ) : (
+            <Text style={s.dim}>Auto drive-detection via Bluetooth needs a physical Android device. You can still log drives manually below.</Text>
+          )}
+        </Card>
+      )}
 
       {/* History */}
       <View style={s.headerRow}>
@@ -474,7 +481,7 @@ export default function VehicleDetail() {
       {/* Drives */}
       <Text style={s.section}>Recent Drives</Text>
       <Card>
-        {drives.length === 0 ? <Empty text="No drives recorded. Pair Bluetooth or log manually." /> : drives.slice(0, 10).map((d) => (
+        {drives.length === 0 ? <Empty text={Platform.OS !== 'ios' ? 'No drives recorded. Select a Bluetooth device above or log manually.' : 'No drives recorded. Log one manually.'} /> : drives.slice(0, 10).map((d) => (
           <View key={d.id} style={s.histRow}>
             <View style={{ flex: 1 }}>
               <Text style={s.body}>{fmtDate(d.start)}</Text>
@@ -571,10 +578,14 @@ export default function VehicleDetail() {
         <View style={{ height: 20 }} />
       </Sheet>
 
-      {/* Pairing sheet */}
-      <Sheet visible={pairing} onClose={() => setPairing(false)} title="Pair Bluetooth">
-        <Text style={s.dim}>Turn on the vehicle's Bluetooth and select it below.</Text>
-        {devices.length === 0 ? <Text style={[s.dim, { marginTop: 16 }]}>Scanning…</Text> : devices.map((d) => (
+      {/* Device select sheet */}
+      <Sheet visible={pairing} onClose={() => setPairing(false)} title="Select Bluetooth Device">
+        <Text style={s.dim}>Choose the device from your phone's paired Bluetooth list.</Text>
+        {loadingDevices ? (
+          <Text style={[s.dim, { marginTop: 16 }]}>Loading…</Text>
+        ) : devices.length === 0 ? (
+          <Text style={[s.dim, { marginTop: 16 }]}>No paired devices found. Pair the vehicle's Bluetooth in your phone's system Bluetooth settings first, then come back here.</Text>
+        ) : devices.map((d) => (
           <TouchableOpacity key={d.id} style={s.devRow} onPress={() => pickDevice(d)}>
             <Text style={s.body}>{d.name}</Text>
             <Text style={s.dim}>{d.id.slice(0, 12)}…</Text>

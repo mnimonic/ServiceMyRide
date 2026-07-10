@@ -46,9 +46,11 @@ export const MAINTENANCE_PRESETS = [
   { key: 'fuel_filter', label: 'Fuel Filter', intervalKm: 30000, intervalMonths: 24, appliesTo: ['car', 'motorcycle'] },
 
   // Brakes
-  { key: 'brake_pads', label: 'Brake Pads', intervalKm: 30000, intervalMonths: 24, appliesTo: ['car', 'motorcycle'] },
+  { key: 'brake_pads_front', label: 'Brake Pads (Front)', intervalKm: 30000, intervalMonths: 24, appliesTo: ['car', 'motorcycle'] },
+  { key: 'brake_pads_rear', label: 'Brake Pads (Rear)', intervalKm: 40000, intervalMonths: 24, appliesTo: ['car', 'motorcycle'] },
   { key: 'brake_fluid', label: 'Brake Fluid', intervalKm: 40000, intervalMonths: 24, appliesTo: ['car', 'motorcycle'] },
-  { key: 'brake_rotors', label: 'Brake Rotors/Discs', intervalKm: 60000, intervalMonths: 48, appliesTo: ['car', 'motorcycle'] },
+  { key: 'brake_rotors_front', label: 'Brake Rotors/Discs (Front)', intervalKm: 60000, intervalMonths: 48, appliesTo: ['car', 'motorcycle'] },
+  { key: 'brake_rotors_rear', label: 'Brake Rotors/Discs (Rear)', intervalKm: 70000, intervalMonths: 48, appliesTo: ['car', 'motorcycle'] },
   { key: 'brake_scooter', label: 'Brake Check', intervalKm: null, intervalMonths: 6, appliesTo: ['scooter'] },
 
   // Tires, wheels & suspension

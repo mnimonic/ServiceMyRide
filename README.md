@@ -47,7 +47,7 @@ Most vehicle-maintenance apps assume a cloud account, a subscription, or a fleet
 | 📦 **Parts inventory** | Track parts you've bought but not installed yet — category, quantity, cost, linked vehicle, and a mark-used/in-stock toggle, with total stock value. |
 | 📄 **Documents & due dates** | Insurance, registration/license, inspection, road tax, warranty — with an auto-scheduled expiry reminder N days ahead. |
 | ⏰ **Reminders** | One-off or repeating (daily/weekly/monthly) local notifications, with quick presets like "charge the battery." |
-| 📶 **Bluetooth drive detection** | Pair a vehicle with its Bluetooth device (head unit, helmet intercom, scooter dongle). A drive session auto-opens on connect and closes on disconnect — plus manual logging as a fallback. |
+| 📶 **Bluetooth drive detection** *(Android)* | Select a vehicle's Bluetooth device from your phone's already-paired list (head unit, helmet intercom, scooter dongle). A drive session auto-opens when your phone connects to it and closes on disconnect — plus manual logging as a fallback (and the only option on iOS). |
 | 📍 **GPS distance tracking** | Optionally track distance travelled during a drive session using device location. |
 | ☁️ **Google sign-in + Drive backup** | Back up all your data to a private folder in your own Google Drive and sync it across devices. Works on iOS and Android. |
 
@@ -57,7 +57,7 @@ All data is stored locally via AsyncStorage as a single JSON document (easy to m
 
 - Node.js 18+ and npm
 - Expo CLI (`npm i -g expo` optional — `npx expo` works without a global install)
-- A **development build** for Bluetooth + notifications on device, since `react-native-ble-plx` is a native module and won't run in Expo Go.
+- A **development build** for Bluetooth (Android) + notifications on device, since both rely on native modules that won't run in Expo Go.
 
 ## Setup
 
@@ -81,7 +81,7 @@ npx expo run:android      # or: npx expo run:ios (needs macOS + Xcode)
 Then `npm start` and open the dev build.
 
 > [!NOTE]
-> Expo Go does **not** include `react-native-ble-plx`. The app still runs there, but Bluetooth pairing shows a "not available" message — use a dev build for full functionality.
+> Expo Go does **not** include the local Bluetooth module. The app still runs there, but Bluetooth device selection shows a "not available" message — use a dev build for full functionality. Bluetooth drive detection itself is Android-only; iOS gives third-party apps no API to observe an already-paired accessory's connection state.
 
 ## Google Sign-In & Drive backup
 
@@ -143,7 +143,7 @@ app/
     inventory.js           Parts inventory
     documents.js           Insurance / registration / due dates
     account.js             Google sign-in + Drive backup/restore/sync
-  vehicle/[id].js          Vehicle detail: maintenance, BLE pairing, drives
+  vehicle/[id].js          Vehicle detail: maintenance, Bluetooth device select, drives
 src/
   constants/index.js       Colors, vehicle types, maintenance presets, doc types
   context/
@@ -154,9 +154,11 @@ src/
   components/ui.js         Reusable UI (Card, Button, Field, Chip, Sheet, Badge…)
   utils/
     notifications.js       expo-notifications scheduling
-    bluetooth.js            react-native-ble-plx drive detection
+    bluetooth.js            Classic Bluetooth (ACL) drive detection, Android only
     googleDrive.js          Google Drive REST API (appDataFolder backup)
     helpers.js              Dates + maintenance-status computation
+modules/
+  servicemyride-bluetooth/  Local Expo native module backing utils/bluetooth.js (Android)
 ```
 
 ## Customizing maintenance intervals
@@ -169,7 +171,11 @@ Edit `src/constants/index.js` → `MAINTENANCE_PRESETS`. Each entry has:
 
 ## Notes on Bluetooth detection
 
-BLE `isDeviceConnected` polling (every 15s) is used as a portable approach that works the same way across platforms. For true background detection when the app is closed, you'd add background BLE plus a foreground service (Android) / background modes (iOS) — the config in `app.json` already enables the permissions and background mode flags to build on.
+The app never scans for or pairs a Bluetooth device itself — the user pairs the vehicle's Bluetooth (head unit, intercom, dongle) once in the phone's own Bluetooth settings, then picks it from that already-paired list in the app. `modules/servicemyride-bluetooth` (a local native module, Android only) then listens for the OS-level `ACTION_ACL_CONNECTED` / `ACTION_ACL_DISCONNECTED` broadcasts for that specific device — the same signal Android fires for any Classic Bluetooth link (HFP/A2DP/SPP), which is what virtually all vehicle Bluetooth uses, unlike BLE. `AppContext` opens a drive session and starts GPS distance tracking on connect, and closes it on disconnect.
+
+This only runs while the vehicle detail screen is mounted, same as the original polling approach. For true background detection when the app is closed, you'd register the broadcast receiver at the OS level (a manifest-declared receiver, or a foreground service) instead of only while the module is active.
+
+iOS has no equivalent: Apple gives third-party apps no public API to list already-paired Classic Bluetooth accessories or observe their connection state (that's restricted to MFi-certified accessories via the ExternalAccessory framework), so this feature is Android-only — iOS falls back to manual drive logging.
 
 ## Contributing
 

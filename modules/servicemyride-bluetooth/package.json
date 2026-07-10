@@ -1,0 +1,7 @@
+{
+  "name": "servicemyride-bluetooth",
+  "version": "1.0.0",
+  "description": "Local Expo module: detects Classic Bluetooth ACL connect/disconnect to an already-paired device.",
+  "main": "index.js",
+  "license": "MIT"
+}

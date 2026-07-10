@@ -1,126 +1,80 @@
 import { Platform, PermissionsAndroid } from 'react-native';
+import * as ServiceMyRideBluetooth from '../../modules/servicemyride-bluetooth';
 
 // Bluetooth drive-detection.
 //
-// How it works: each vehicle can be paired with a Bluetooth device id
-// (e.g. the car's handsfree/head-unit, or a helmet intercom / scooter dongle).
-// When that device connects, we consider the vehicle "in use" and open a drive
-// session; when it disconnects we close the session and can prompt to log km.
-
-let BleManager = null;
-let manager = null;
-
-function getManager() {
-  if (manager) return manager;
-  try {
-    const { BleManager: BM } = require('react-native-ble-plx');
-    BleManager = BM;
-    manager = new BleManager();
-  } catch (e) {
-    manager = null;
-  }
-  return manager;
-}
+// How it works: each vehicle can be associated with a Bluetooth device the
+// phone is ALREADY paired with at the OS level (car head unit, helmet
+// intercom, scooter dongle, etc - the user pairs it once via system
+// Bluetooth settings, same as pairing for calls/music). We never scan for or
+// initiate our own connection to a device; we only watch the OS-level
+// Classic Bluetooth connection state (ACL link) for a device the user picks
+// from their phone's already-paired list. When that link comes up we
+// consider the vehicle "in use" and open a drive session; when it drops we
+// close the session and log the tracked distance.
+//
+// Android only: most vehicle Bluetooth is Classic Bluetooth (HFP/A2DP/SPP),
+// and completing a new Classic Bluetooth pairing from a third-party app
+// isn't possible on either platform - it must already exist in the phone's
+// Bluetooth settings. iOS additionally gives third-party apps no public API
+// to enumerate already-paired Classic Bluetooth accessories or observe their
+// connection state (Apple restricts that to MFi-certified accessories via
+// ExternalAccessory), so this feature is unavailable there; iOS users log
+// drives manually.
 
 export function isSupported() {
-  return !!getManager();
+  return Platform.OS === 'android' && ServiceMyRideBluetooth.isSupported();
 }
 
-// Declaring BLUETOOTH_SCAN/CONNECT/ACCESS_FINE_LOCATION in the manifest isn't
-// enough on Android 6+ - they're dangerous permissions that also need a
-// runtime grant, or ble-plx throws "Device is not authorized to use
-// BluetoothLE" on every scan/connect. iOS has no equivalent step (CoreBluetooth
-// prompts on first use from the Info.plist strings already set in app.config.js).
+// BLUETOOTH_CONNECT is a dangerous permission on Android 12+ (API 31+) and
+// needs a runtime grant, or bonded-device lookups/connection state throw.
+// Below API 31, BLUETOOTH is a normal permission granted at install time.
 async function ensurePermissions() {
   if (Platform.OS !== 'android') return true;
-  const perms = Platform.Version >= 31
-    ? [PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN, PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT]
-    : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
-  const results = await PermissionsAndroid.requestMultiple(perms);
-  return perms.every((p) => results[p] === PermissionsAndroid.RESULTS.GRANTED);
+  if (Platform.Version < 31) return true;
+  const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
+  return result === PermissionsAndroid.RESULTS.GRANTED;
 }
 
-// Scan for nearby/known devices so the user can pick one to associate.
-// Returns an unsubscribe function. Emits {id, name} for each discovered device.
-export function scanForDevices(onDevice, onError) {
-  const mgr = getManager();
-  if (!mgr) {
-    onError && onError(new Error('Bluetooth not available on this platform'));
-    return () => {};
+// Lists devices already paired with this phone at the OS level, for the user
+// to pick which one represents this vehicle. Throws if unsupported or if
+// permission is denied.
+export async function listPairedDevices() {
+  if (!isSupported()) {
+    throw new Error('Bluetooth vehicle detection is only available on a physical Android device.');
   }
-  const seen = new Set();
-  let sub = null;
-  let stopped = false;
-
-  ensurePermissions().then((granted) => {
-    if (stopped) return;
-    if (!granted) {
-      onError && onError(new Error('Bluetooth permission was denied'));
-      return;
-    }
-    sub = mgr.onStateChange((state) => {
-      if (state === 'PoweredOn') {
-        mgr.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
-          if (error) {
-            onError && onError(error);
-            return;
-          }
-          if (device && !seen.has(device.id)) {
-            seen.add(device.id);
-            onDevice({ id: device.id, name: device.name || device.localName || 'Unknown' });
-          }
-        });
-      }
-    }, true);
-  });
-
-  return () => {
-    stopped = true;
-    try {
-      mgr.stopDeviceScan();
-      sub && sub.remove();
-    } catch (e) {}
-  };
+  const granted = await ensurePermissions();
+  if (!granted) {
+    throw new Error('Bluetooth permission was denied.');
+  }
+  return ServiceMyRideBluetooth.getBondedDevices();
 }
 
-// Monitor connection state of a specific device id. onConnect/onDisconnect
-// fire as the paired device comes and goes. Returns unsubscribe fn.
+// Monitor connection state of a specific paired device id. onConnect/
+// onDisconnect fire as the vehicle's Bluetooth comes in and out of range.
+// Returns an unsubscribe function.
 export function monitorDevice(deviceId, { onConnect, onDisconnect }) {
-  const mgr = getManager();
-  if (!mgr || !deviceId) return () => {};
+  if (!isSupported() || !deviceId) return () => {};
 
-  let poll = null;
-  let connected = false;
+  let connectedSub = null;
+  let disconnectedSub = null;
   let stopped = false;
-
-  async function check() {
-    try {
-      const isConn = await mgr.isDeviceConnected(deviceId);
-      if (isConn && !connected) {
-        connected = true;
-        onConnect && onConnect();
-      } else if (!isConn && connected) {
-        connected = false;
-        onDisconnect && onDisconnect();
-      }
-    } catch (e) {}
-  }
 
   ensurePermissions().then((granted) => {
     if (stopped || !granted) return;
-    poll = setInterval(check, 15000);
-    check();
+    connectedSub = ServiceMyRideBluetooth.addConnectedListener((e) => {
+      if (e?.id === deviceId) onConnect && onConnect();
+    });
+    disconnectedSub = ServiceMyRideBluetooth.addDisconnectedListener((e) => {
+      if (e?.id === deviceId) onDisconnect && onDisconnect();
+    });
+    ServiceMyRideBluetooth.startMonitoring(deviceId);
   });
 
   return () => {
     stopped = true;
-    poll && clearInterval(poll);
+    ServiceMyRideBluetooth.stopMonitoring();
+    connectedSub && connectedSub.remove();
+    disconnectedSub && disconnectedSub.remove();
   };
-}
-
-export function destroy() {
-  if (manager) {
-    try { manager.destroy(); } catch (e) {}
-    manager = null;
-  }
 }
